@@ -82,8 +82,9 @@ $<TARGET_FILE:__idf_perfmon>
 $<TARGET_FILE:__idf_rt>
 $<TARGET_FILE:__idf_spiffs>
 $<TARGET_FILE:__idf_wifi_provisioning>
-$<TARGET_FILE:__idf_key_reconstruction>
-$<TARGET_FILE:__idf_main>
 $<TARGET_FILE:__idf_beacon_pdu>
-$<TARGET_FILE:__idf_ble_gap>
 $<TARGET_FILE:__idf_dispatcher>
+$<TARGET_FILE:__idf_ble_gap>
+$<TARGET_FILE:__idf_main>
+$<TARGET_FILE:__idf_crypto>
+$<TARGET_FILE:__idf_key_reconstruction>

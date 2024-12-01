@@ -549,17 +549,12 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/key_reconstruction/cmake_install.cmake")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/main/cmake_install.cmake")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
   include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/beacon_pdu/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/dispatcher/cmake_install.cmake")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
@@ -569,6 +564,16 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/dispatcher/cmake_install.cmake")
+  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/main/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/crypto/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/key_reconstruction/cmake_install.cmake")
 endif()
 

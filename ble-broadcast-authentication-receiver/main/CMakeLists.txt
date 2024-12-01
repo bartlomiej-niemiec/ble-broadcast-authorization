@@ -1,7 +1,7 @@
-idf_component_register(SRCS "esp_ibeacon_api.c" "ibeacon_demo.c"
+idf_component_register(SRCS "main.c"
                     INCLUDE_DIRS "."
                     REQUIRES esp_timer
                     REQUIRES nvs_flash
                     REQUIRES bt
-                    PRIV_REQUIRES key_reconstruction
+                    PRIV_REQUIRES ble_gap
                     )

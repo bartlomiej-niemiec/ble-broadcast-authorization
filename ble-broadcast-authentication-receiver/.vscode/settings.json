@@ -22,6 +22,15 @@
         "key_management.h": "c",
         "key_reconstructor.C": "cpp",
         "cstdlib": "cpp",
-        "dispatcher.h": "c"
+        "dispatcher.h": "c",
+        "bitset": "c",
+        "string_view": "c",
+        "regex": "c",
+        "freertos.h": "c",
+        "array": "c",
+        "string": "c",
+        "span": "c",
+        "format": "c",
+        "initializer_list": "c"
     }
 }

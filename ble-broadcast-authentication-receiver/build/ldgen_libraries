@@ -82,8 +82,9 @@ C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authenticatio
 C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/rt/librt.a
 C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/spiffs/libspiffs.a
 C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
-C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/key_reconstruction/libkey_reconstruction.a
-C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/main/libmain.a
 C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/beacon_pdu/libbeacon_pdu.a
-C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/ble_gap/libble_gap.a
 C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/dispatcher/libdispatcher.a
+C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/ble_gap/libble_gap.a
+C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/main/libmain.a
+C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/crypto/libcrypto.a
+C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-receiver/build/esp-idf/key_reconstruction/libkey_reconstruction.a
