@@ -19,6 +19,8 @@ typedef struct {
 
 esp_err_t build_beacon_pdu_data (beacon_crypto_data *crypto, uint8_t* payload, size_t payload_size, beacon_pdu_data *bpd);
 
+esp_err_t fill_marker_in_pdu(beacon_pdu_data *bpd);
+
 bool is_pdu_in_beacon_pdu_format(uint8_t *data, size_t size);
 
 #endif

@@ -1,4 +1,4 @@
-# Install script for directory: C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-sender/components/beacon_pdu
+# Install script for directory: C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/beacon_pdu
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

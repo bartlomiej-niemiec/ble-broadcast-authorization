@@ -2,7 +2,7 @@
 #include "ble_receiver.h"
 #include "ble_common.h"
 
-#define SENDER
+#define RECEIVER
 
 void app_main(void)
 {

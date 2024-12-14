@@ -39,7 +39,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-sender/build/bootloader/esp-idf/cmake_install.cmake")
+  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/build/bootloader/esp-idf/cmake_install.cmake")
 endif()
 
 if(CMAKE_INSTALL_COMPONENT)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-sender/build/bootloader/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/build/bootloader/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

@@ -33,6 +33,16 @@
         "format": "c",
         "initializer_list": "c",
         "*.tcc": "c",
-        "limits.h": "c"
+        "limits.h": "c",
+        "stdint.h": "c",
+        "beacon_marker.h": "c",
+        "random": "c",
+        "crypto.h": "c",
+        "ranges": "c",
+        "ble_sender_msg_encryptor.h": "c",
+        "ble_broadcast.h": "c",
+        "ble_msg_encryptor.h": "c",
+        "chrono": "cpp",
+        "functional": "cpp"
     }
 }

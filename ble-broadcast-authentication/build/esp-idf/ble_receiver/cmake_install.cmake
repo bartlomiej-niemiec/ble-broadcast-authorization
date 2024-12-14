@@ -1,4 +1,4 @@
-# Install script for directory: C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-sender/components/ble_receiver
+# Install script for directory: C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

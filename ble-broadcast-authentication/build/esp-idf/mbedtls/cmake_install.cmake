@@ -39,6 +39,6 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication-sender/build/esp-idf/mbedtls/mbedtls/cmake_install.cmake")
+  include("C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/build/esp-idf/mbedtls/mbedtls/cmake_install.cmake")
 endif()
 

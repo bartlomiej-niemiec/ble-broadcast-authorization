@@ -1,16 +1,11 @@
  
 #include "esp_log.h"
 #include "esp_gap_ble_api.h"
-#include "esp_timer.h"
 #include "beacon_pdu_data.h"
 #include "dispatcher.h"
+#include "key_reconstructor.h"
 
 static const char * BLE_GAP_LOG_GROUP = "BLE_RECEIVER";
-
-inline int64_t get_timestamp()
-{
-    return esp_timer_get_time();
-}
 
 static esp_ble_scan_params_t default_ble_scan_params = {
     .scan_type              = BLE_SCAN_TYPE_ACTIVE,
@@ -41,16 +36,14 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         break;
 
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
-        int64_t timestamp = get_timestamp();
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
             {
-                if (is_pdu_in_beacon_pdu_format(scan_result->scan_rst.ble_adv, scan_result->scan_rst.adv_data_len))
+                ble_broadcast_pdu pdu = {0};
+                if (true == create_ble_broadcast_pdu_for_dispatcher(&pdu, scan_result->scan_rst.ble_adv, scan_result->scan_rst.adv_data_len))
                 {
-                    ble_broadcast_pdu pdu = {0};
-                    create_ble_broadcast_pdu_for_dispatcher(&pdu, scan_result->scan_rst.ble_adv, scan_result->scan_rst.adv_data_len, timestamp);
-                    AddPduToDispatcher(&pdu);
+                    queue_pdu_for_dispatching(&pdu);
                 }
             }
             break;
@@ -90,7 +83,8 @@ void ble_appRegister(void)
 
  void ble_start_receiver(void)
 {
-    SpawnDispatcherTask();
+    start_up_dispatcher();
+    start_up_key_reconstructor();
     ble_appRegister();
     esp_ble_gap_set_scan_params(&default_ble_scan_params);
 }

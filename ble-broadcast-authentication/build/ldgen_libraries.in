@@ -86,7 +86,5 @@ $<TARGET_FILE:__idf_ble_gap>
 $<TARGET_FILE:__idf_crypto>
 $<TARGET_FILE:__idf_beacon_pdu>
 $<TARGET_FILE:__idf_ble_sender>
-$<TARGET_FILE:__idf_dispatcher>
 $<TARGET_FILE:__idf_ble_receiver>
 $<TARGET_FILE:__idf_main>
-$<TARGET_FILE:__idf_key_reconstruction>

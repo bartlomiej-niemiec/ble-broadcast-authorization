@@ -1,6 +1,0 @@
-#ifndef BLE_SENDER_MSG_ENCRYPTOR_H
-#define BLE_SENDER_MSG_ENCRYPTO_H
-
-
-
-#endif

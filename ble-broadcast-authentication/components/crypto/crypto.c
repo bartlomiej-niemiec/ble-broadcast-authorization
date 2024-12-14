@@ -1,8 +1,10 @@
 #include "crypto.h"
+#include <stdio.h>
 #include <string.h>
 #include "esp_crc.h"
 #include "mbedtls/aes.h"
 #include "mbedtls/gcm.h"
+#include "mbedtls/md.h"
 #include "esp_random.h"
 
 void generate_128b_key(key_128b * key)
@@ -43,117 +45,105 @@ void add_fragment_to_key_spliited(key_splitted * key_splitted, uint8_t *fragment
     memcpy(key_splitted->fragment[fragment_index], fragment, KEY_FRAGMENT_SIZE);
 }
 
-uint16_t calculate_crc_for_key_fragment(key_splitted * key_splitted, uint8_t no_fragment)
+int aes_ctr_encrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t *nonce, uint8_t *output) {
+    mbedtls_aes_context aes;
+    mbedtls_aes_init(&aes);
+
+    if (mbedtls_aes_setkey_enc(&aes, key, 128) != 0) {
+        mbedtls_aes_free(&aes);
+        return -1; // Error: Failed to set AES key
+    }
+
+    size_t nc_off = 0; // Offset for the stream block
+    uint8_t stream_block[16] = {0};
+
+    if (mbedtls_aes_crypt_ctr(&aes, length, &nc_off, nonce, stream_block, input, output) != 0) {
+        mbedtls_aes_free(&aes);
+        return -2; // Error: AES CTR encryption failed
+    }
+
+    mbedtls_aes_free(&aes);
+    return 0; // Success
+}
+
+int aes_ctr_decrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t *nonce, uint8_t *output) {
+    // Decryption in CTR mode is identical to encryption
+    return aes_ctr_encrypt_payload(input, length, key, nonce, output);
+}
+
+void xor_encrypt_key_fragment(uint8_t fragment[KEY_FRAGMENT_SIZE], uint8_t encrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t xor_seed) {
+    encrypted_fragment[0] = fragment[0] ^ xor_seed;
+    for (int i = 1; i < KEY_FRAGMENT_SIZE; i++) {
+        encrypted_fragment[i] = fragment[i] ^ encrypted_fragment[i - 1];
+    }
+}
+
+void xor_decrypt_key_fragment(uint8_t encrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t decrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t xor_seed) {
+    decrypted_fragment[0] = encrypted_fragment[0] ^ xor_seed;
+    for (int i = 1; i < KEY_FRAGMENT_SIZE; i++) {
+        decrypted_fragment[i] = encrypted_fragment[i] ^ encrypted_fragment[i - 1];
+    }
+}
+
+
+uint8_t get_random_seed()
 {
-    // Validate pointers
-    if (key_splitted == NULL) {
-        return 0; // Return 0 or another appropriate value for invalid input
-    }
-
-    // Validate fragment index
-    if (no_fragment >= NO_KEY_FRAGMENTS) {
-        return 0; // Return 0 if the fragment index is out of range
-    }
-
-    return esp_crc16_le(0xFFFF, key_splitted->fragment[no_fragment], KEY_FRAGMENT_SIZE);
+    uint8_t seed;
+    esp_fill_random(&seed, sizeof(seed));
+    return seed;
 }
 
-void generate_iv(uint16_t pdu_id, uint64_t time_interval, uint8_t *iv) {
-    uint8_t *iv_ptr = iv;
+void calculate_hmac(const uint8_t *key, size_t key_len, const uint8_t *message, size_t message_len, uint8_t *output)
+{
+    mbedtls_md_context_t ctx;
+    const mbedtls_md_info_t *md_info;
+    int ret;
 
-    // First 2 bytes of IV: Copy PDU ID (2 bytes)
-    iv_ptr[0] = (uint8_t)(pdu_id >> 8);  // High byte of PDU ID
-    iv_ptr[1] = (uint8_t)(pdu_id & 0xFF);  // Low byte of PDU ID
+    // Initialize the HMAC context
+    mbedtls_md_init(&ctx);
 
-    // Fill the remaining part of the IV with the timestamp or custom time value
-    iv_ptr[2] = (uint8_t)(time_interval >> 56);
-    iv_ptr[3] = (uint8_t)(time_interval >> 48);
-    iv_ptr[4] = (uint8_t)(time_interval >> 40);
-    iv_ptr[5] = (uint8_t)(time_interval >> 32);
-    iv_ptr[6] = (uint8_t)(time_interval >> 24);
-    iv_ptr[7] = (uint8_t)(time_interval >> 16);
-    iv_ptr[8] = (uint8_t)(time_interval >> 8);
-    iv_ptr[9] = (uint8_t)(time_interval);  // Low byte of timestamp
+    // Select the hash function (e.g., SHA-256)
+    md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (md_info == NULL) {
+        printf("Failed to get hash algorithm info\n");
+        return;
+    }
 
-    // For simplicity, the timestamp might only take the first 10 bytes of the IV
-    // Fill the last 6 bytes with zeros (or any deterministic value if needed)
-    memset(&iv_ptr[10], 0, 6);  // Optionally, you can fill the remaining bytes as needed
+    // Start HMAC with the chosen hash function
+    ret = mbedtls_md_setup(&ctx, md_info, 1); // '1' means HMAC
+    if (ret != 0) {
+        printf("HMAC setup failed, error code: %d\n", ret);
+        mbedtls_md_free(&ctx);
+        return;
+    }
+
+    // Set the HMAC key
+    ret = mbedtls_md_hmac_starts(&ctx, key, key_len);
+    if (ret != 0) {
+        printf("HMAC starts failed, error code: %d\n", ret);
+        mbedtls_md_free(&ctx);
+        return;
+    }
+
+    // Add the message
+    ret = mbedtls_md_hmac_update(&ctx, message, message_len);
+    if (ret != 0) {
+        printf("HMAC update failed, error code: %d\n", ret);
+        mbedtls_md_free(&ctx);
+        return;
+    }
+
+    // Finalize and write the HMAC output
+    ret = mbedtls_md_hmac_finish(&ctx, output);
+    if (ret != 0) {
+        printf("HMAC finish failed, error code: %d\n", ret);
+    }
+
+    // Free the HMAC context
+    mbedtls_md_free(&ctx);
 }
 
-int encrypt_payload_aes_ctr(uint8_t *payload, size_t payload_size, uint8_t *key, uint8_t *encrypted_payload, uint8_t *iv) {
-    mbedtls_aes_context aes;
-    mbedtls_aes_init(&aes);
-
-    // Set the AES key for encryption
-    if (mbedtls_aes_setkey_enc(&aes, key, 128) != 0) {
-        mbedtls_aes_free(&aes);
-        return -1; // Error: Failed to set AES key
-    }
-
-    uint8_t counter[AES_BLOCK_BYTES] = {0};
-    uint8_t stream_block[AES_BLOCK_BYTES] = {0};
-
-    // Copy the IV into the counter for the first block
-    memcpy(counter, iv, AES_BLOCK_BYTES);
-
-    // Process the payload using AES-CTR (encryption in stream mode)
-    for (size_t i = 0; i < payload_size; i++) {
-        if (i % AES_BLOCK_BYTES == 0) {
-            // Encrypt the counter (AES block)
-            if (mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, counter, stream_block) != 0) {
-                mbedtls_aes_free(&aes);
-                return -2; // Error: AES encryption failed
-            }
-
-            // Increment the counter for the next block (CTR mode)
-            for (int j = AES_BLOCK_BYTES - 1; j >= 0; j--) {
-                if (++counter[j] != 0) break;
-            }
-        }
-
-        // XOR the encrypted stream block with the payload byte to encrypt it
-        encrypted_payload[i] = payload[i] ^ stream_block[i % AES_BLOCK_BYTES];
-    }
-
-    mbedtls_aes_free(&aes);
-    return 0; // Success
-}
-
-int decrypt_payload_aes_ctr(uint8_t *encrypted_payload, size_t payload_size, uint8_t *key, uint8_t *decrypted_payload, uint8_t *iv) {
-    mbedtls_aes_context aes;
-    mbedtls_aes_init(&aes);
-
-    // Set the AES key for decryption (AES-CTR is symmetric)
-    if (mbedtls_aes_setkey_enc(&aes, key, 128) != 0) {
-        mbedtls_aes_free(&aes);
-        return -1; // Error: Failed to set AES key
-    }
-
-    uint8_t counter[AES_BLOCK_BYTES] = {0};
-    uint8_t stream_block[AES_BLOCK_BYTES] = {0};
-
-    // Copy the IV into the counter for the first block
-    memcpy(counter, iv, AES_BLOCK_BYTES);
-
-    // Decrypt the payload using AES-CTR
-    for (size_t i = 0; i < payload_size; i++) {
-        if (i % AES_BLOCK_BYTES == 0) {
-            // Encrypt the counter (AES block) for the next stream block
-            if (mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, counter, stream_block) != 0) {
-                mbedtls_aes_free(&aes);
-                return -2; // Error: AES encryption failed
-            }
-
-            // Increment the counter for the next block
-            for (int j = AES_BLOCK_BYTES - 1; j >= 0; j--) {
-                if (++counter[j] != 0) break;
-            }
-        }
-
-        // XOR the encrypted stream block with the encrypted payload byte to decrypt it
-        decrypted_payload[i] = encrypted_payload[i] ^ stream_block[i % AES_BLOCK_BYTES];
-    }
-
-    mbedtls_aes_free(&aes);
-    return 0; // Success
+void calculate_hmac_of_fragment(uint8_t *key_fragment, uint8_t *encrypted_fragment, uint8_t *hmac_output) {
+    // Calculate HMAC of the encrypted fragment using the decrypted key fragment as the key
+    calculate_hmac(key_fragment, KEY_FRAGMENT_SIZE, encrypted_fragment, KEY_FRAGMENT_SIZE, hmac_output);
 }

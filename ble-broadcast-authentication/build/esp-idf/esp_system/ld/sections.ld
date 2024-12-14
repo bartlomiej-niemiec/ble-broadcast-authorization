@@ -1,6 +1,6 @@
 /* Automatically generated file; DO NOT EDIT */
 /* Espressif IoT Development Framework Linker Script */
-/* Generated from: C:\GitHub\MyRepos\esp32-ble-broadcast-authentication\ble-broadcast-authentication-sender\build\esp-idf\esp_system\ld\sections.ld.in */
+/* Generated from: C:\GitHub\MyRepos\esp32-ble-broadcast-authentication\ble-broadcast-authentication\build\esp-idf\esp_system\ld\sections.ld.in */
 
 /*
 
