@@ -49,3 +49,23 @@ esp_err_t fill_marker_in_pdu(beacon_pdu_data *bpd)
     memcpy(&(bpd->marker), &my_marker, sizeof(beacon_marker));
     return ESP_OK;
 }
+
+void build_nonce(uint8_t nonce[NONCE_SIZE], const beacon_marker* marker, uint8_t key_fragment_number, uint16_t key_id, uint8_t xor_seed)
+{
+    memset(nonce, 0, 16);
+
+    // Copy the marker into the beginning of the nonce.
+    memcpy(nonce, marker->marker, sizeof(beacon_marker));
+
+    // Add the key ID (2 bytes) in little-endian format.
+    nonce[sizeof(beacon_marker)]     = key_id & 0xFF;        // Low byte of key ID
+    nonce[sizeof(beacon_marker) + 1] = (key_id >> 8) & 0xFF; // High byte of key ID
+
+    // Add the key fragment number (1 byte).
+    nonce[sizeof(beacon_marker) + 2] = key_fragment_number;
+
+    // Add the XOR seed (1 byte).
+    nonce[sizeof(beacon_marker) + 3] = xor_seed;
+
+    // The remaining bytes of the nonce are already zero-filled from memset.
+}

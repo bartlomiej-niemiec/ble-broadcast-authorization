@@ -6,47 +6,69 @@
 static const char *KEY_CACHE_LOG_GROUP = "KEY CACHE LOG";
 
 
-int create_key_cache(key_reconstruction_cache * key_cache, const uint8_t cache_size)
+int create_key_cache(key_reconstruction_cache ** key_cache, const uint8_t cache_size)
 {
-    key_cache = (key_reconstruction_cache *) malloc(sizeof(key_reconstruction_cache));
-    if (key_cache != NULL)
+    int status = 0;
+    *key_cache = (key_reconstruction_cache *) malloc(sizeof(key_reconstruction_cache));
+    if (*key_cache != NULL)
     {
-        return 0;
+        ESP_LOGI(KEY_CACHE_LOG_GROUP, "Successfully allocated space for key cache at: %p", key_cache);
+        (*key_cache)->map = (key_reconstruction_map* ) malloc(sizeof(key_reconstruction_map) * cache_size);
+        (*key_cache)->cache_size = cache_size;
+        (*key_cache)->xMutexCacheAccess = NULL;
+        
+        if ((*key_cache)->map == NULL)
+        {
+            ESP_LOGE(KEY_CACHE_LOG_GROUP, "Failed to allocate space for key cache map");
+            free(*key_cache); // Free the main structure to avoid memory leaks
+            *key_cache = NULL; // Reset the pointer
+            status = -1;
+        }
+        else
+        {
+            ESP_LOGI(KEY_CACHE_LOG_GROUP, "Successfully allocated space for key cache map at: %p", (*key_cache)->map);
+        }
     }
     else
     {
-        return -1;
+        status = -1;
     }
+
+    return status;
 }
 
 int init_key_cache(key_reconstruction_cache * key_cache)
 {
     int status = 0;
 
-    if (key_cache->xMutexCacheAccess != NULL)
+    if (key_cache == NULL)
     {
-        key_cache->xMutexCacheAccess = xSemaphoreCreateMutex();
-
-        if (key_cache->xMutexCacheAccess == NULL) {
-            status = -1;
-            ESP_LOGE(KEY_CACHE_LOG_GROUP, "Failed to create Key reconstruction Cache!");
-        }
+        return -3;
     }
 
-    if (xSemaphoreTake(key_cache->xMutexCacheAccess, portMAX_DELAY))
-    {   
-        //Init cache
-        for (int i = 0; i < key_cache->cache_size; i++)
-        {
-            key_cache->map[i].key_id = 0;
-            memset(&(key_cache->map[i].key), 0, sizeof(key_cache->map[i].key));
-        }
-        xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
+    key_cache->xMutexCacheAccess = xSemaphoreCreateMutex();
+
+    if (key_cache->xMutexCacheAccess == NULL) {
+        status = -1;
+        ESP_LOGE(KEY_CACHE_LOG_GROUP, "Failed to create Key reconstruction Cache!");
     }
     else
     {
-        ESP_LOGE(KEY_CACHE_LOG_GROUP, "Failed to acquire mutex for cache access");
-        status = -2; // Mutex acquisition failure
+        if (xSemaphoreTake(key_cache->xMutexCacheAccess, portMAX_DELAY))
+        {   
+            //Init cache
+            for (int i = 0; i < key_cache->cache_size; i++)
+            {
+                key_cache->map[i].key_id = 0;
+                memset(&(key_cache->map[i].key), 0, sizeof(key_cache->map[i].key));
+            }
+            xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
+        }
+        else
+        {
+            ESP_LOGE(KEY_CACHE_LOG_GROUP, "Failed to acquire mutex for cache access");
+            status = -2; // Mutex acquisition failure
+        }
     }
 
     return status;
@@ -54,6 +76,11 @@ int init_key_cache(key_reconstruction_cache * key_cache)
 
 int add_key_to_cache(key_reconstruction_cache * const key_cache, key_128b * key, uint8_t key_id)
 {
+    if (key_cache == NULL)
+    {
+        return -3;
+    }
+
     int status = 0;
     int first_free_index = -1;
     bool key_is_already_in_cache = false;
@@ -101,6 +128,11 @@ int add_key_to_cache(key_reconstruction_cache * const key_cache, key_128b * key,
 
 int remove_key_from_cache(key_reconstruction_cache * const key_cache, uint8_t key_id)
 {
+    if (key_cache == NULL)
+    {
+        return -3;
+    }
+
     int status = 0;
     if (xSemaphoreTake(key_cache->xMutexCacheAccess, portMAX_DELAY))
     {
@@ -133,6 +165,11 @@ int remove_key_from_cache(key_reconstruction_cache * const key_cache, uint8_t ke
 
 int get_key_from_cache(key_reconstruction_cache * const key_cache, key_128b * const reconstructed_key, uint8_t key_id)
 {
+    if (key_cache == NULL)
+    {
+        return -3;
+    }
+
     int status = 0;
     if (xSemaphoreTake(key_cache->xMutexCacheAccess, portMAX_DELAY))
     {
@@ -168,6 +205,11 @@ int get_key_from_cache(key_reconstruction_cache * const key_cache, key_128b * co
 
 bool is_key_in_cache(key_reconstruction_cache * const key_cache, uint8_t key_id)
 {
+    if (key_cache == NULL)
+    {
+        return -3;
+    }
+
     bool status = false;
     if (xSemaphoreTake(key_cache->xMutexCacheAccess, portMAX_DELAY))
     {

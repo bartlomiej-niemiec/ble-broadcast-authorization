@@ -22,38 +22,13 @@ bool init_payload_encryption()
     if (isInitialized == false)
     {
         key_id = 1;
-        for (int i = 0; i < KEY_SIZE; i ++)
-        {
-            memset(&pre_shared_key.key[i], 1, sizeof(uint8_t));
-        }
-        //generate_128b_key(&pre_shared_key);
+        generate_128b_key(&pre_shared_key);
         split_128b_key_to_fragment(&pre_shared_key, &splitted_pre_shared_key);
         isInitialized = true;
     }
 
     return isInitialized;
 }
-
-void build_nonce(uint8_t nonce[16], const beacon_marker* marker, uint8_t key_fragment_number, uint16_t key_id, uint8_t xor_seed)
-{
-    memset(nonce, 0, 16);
-
-    // Copy the marker into the beginning of the nonce.
-    memcpy(nonce, marker->marker, sizeof(beacon_marker));
-
-    // Add the key ID (2 bytes) in little-endian format.
-    nonce[sizeof(beacon_marker)]     = key_id & 0xFF;        // Low byte of key ID
-    nonce[sizeof(beacon_marker) + 1] = (key_id >> 8) & 0xFF; // High byte of key ID
-
-    // Add the key fragment number (1 byte).
-    nonce[sizeof(beacon_marker) + 2] = key_fragment_number;
-
-    // Add the XOR seed (1 byte).
-    nonce[sizeof(beacon_marker) + 3] = xor_seed;
-
-    // The remaining bytes of the nonce are already zero-filled from memset.
-}
-
 
 
 int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * encrypted_pdu)
@@ -66,7 +41,7 @@ int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * en
 
     const uint8_t key_fragment_no = get_random_fragment_id();
     const uint8_t random_xor_seed = get_random_seed();
-    uint8_t nonce[16] = {0};
+    uint8_t nonce[NONCE_SIZE] = {0};
 
     encrypted_pdu->bcd.key_fragment_no = key_fragment_no;
     encrypted_pdu->bcd.key_id = key_id;

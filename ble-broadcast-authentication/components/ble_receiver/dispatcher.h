@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 #define MAX_BLE_BROADCAST_SIZE_BYTES 31
 
@@ -11,9 +12,9 @@ typedef struct{
     size_t data_len;
 } ble_broadcast_pdu;
 
-void start_up_dispatcher(void);
+int start_up_dispatcher();
 
-void queue_pdu_for_dispatching(ble_broadcast_pdu* pdu);
+int queue_pdu_for_dispatching(ble_broadcast_pdu* pdu);
 
 bool create_ble_broadcast_pdu_for_dispatcher(ble_broadcast_pdu* pdu, uint8_t *data, size_t size);
 

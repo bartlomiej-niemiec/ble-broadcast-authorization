@@ -43,6 +43,7 @@
         "ble_broadcast.h": "c",
         "ble_msg_encryptor.h": "c",
         "chrono": "cpp",
-        "functional": "cpp"
+        "functional": "cpp",
+        "key_reconstructor.h": "c"
     }
 }

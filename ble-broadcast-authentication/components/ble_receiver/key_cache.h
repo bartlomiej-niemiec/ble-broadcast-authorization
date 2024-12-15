@@ -18,7 +18,7 @@ typedef struct {
     uint8_t cache_size;
 } key_reconstruction_cache;
 
-int create_key_cache(key_reconstruction_cache * key_cache, const uint8_t cache_size);
+int create_key_cache(key_reconstruction_cache ** key_cache, const uint8_t cache_size);
 
 int init_key_cache(key_reconstruction_cache * key_cache);
 

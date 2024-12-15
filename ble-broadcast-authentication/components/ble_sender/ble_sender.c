@@ -10,7 +10,7 @@
 char payload[MAX_PDU_PAYLOAD_SIZE] = {0};
 volatile uint16_t counter = 0;
 static const char* SENDER_APP_LOG_GROUP = "SENDER APP";
-static const char PAYLOAD_HELLO[] = "HELLO WORD";
+static const char PAYLOAD_HELLO[] = "HELLOWORD";
 
 
 void ble_sender_main();
@@ -72,6 +72,6 @@ void ble_sender_main()
 
 int build_new_payload()
 {
-    int result = snprintf(payload, sizeof(payload), "%s %i", PAYLOAD_HELLO, counter % 99);
+    int result = snprintf(payload, sizeof(payload), "%s%i", PAYLOAD_HELLO, counter % 99);
     return result;
 } 

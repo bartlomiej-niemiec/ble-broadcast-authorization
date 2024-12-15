@@ -3,6 +3,7 @@
 #include "esp_gap_ble_api.h"
 #include "beacon_pdu_data.h"
 #include "dispatcher.h"
+#include "sec_pdu_processing.h"
 
 static const char * BLE_GAP_LOG_GROUP = "BLE_RECEIVER";
 
@@ -82,7 +83,23 @@ void ble_appRegister(void)
 
  void ble_start_receiver(void)
 {
-    start_up_dispatcher();
+    int sec_pdu_status = start_up_sec_processing();
+    if (sec_pdu_status == 0)
+    {
+        ESP_LOGI(BLE_GAP_LOG_GROUP, "Sec PDU Creation Success");
+    }
+    else
+    {
+        ESP_LOGI(BLE_GAP_LOG_GROUP, "Sec PDU Creation Failed: %i", sec_pdu_status);
+        return;
+    }
+    
+    int status_dispatcher = start_up_dispatcher();
+    if (status_dispatcher != 0)
+    {
+        ESP_LOGE(BLE_GAP_LOG_GROUP, "start up dispatcher failed!");
+        return;
+    }
     ble_appRegister();
     esp_ble_gap_set_scan_params(&default_ble_scan_params);
 }
