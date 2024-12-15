@@ -8,6 +8,7 @@
 #include "freertos/ringbuf.h"
 #include "esp_log.h"
 #include <limits.h> 
+#include "key_cache.h"
 
 #define MAX_NO_ELEMENTS_IN_BUFFER 10
 #define BUFFER_SIZE ((MAX_NO_ELEMENTS_IN_BUFFER) * (MAX_BLE_BROADCAST_SIZE_BYTES))
@@ -19,14 +20,52 @@
 
 static const char* DIST_LOG_GROUP = "DISPATCHER TASK";
 static const char* DISTRIBUATION_TASK_NAME = "DISPATCHER TASK";
+
 TaskHandle_t *xDistribuationTask = NULL;
 RingbufHandle_t ringBuffer;
+static key_reconstruction_cache * key_cache;
+static const uint8_t key_cache_size = 3;
 
-void key_reconstruction_complete(uint8_t key_id, const key_128b * const reconstructed_key)
+void key_reconstruction_complete(uint8_t key_id, key_128b * const reconstructed_key)
 {
-    ESP_LOGI(DISTRIBUATION_TASK_NAME, "Key reconstruction success!");
-    ESP_LOGI(DISTRIBUATION_TASK_NAME, "Reconstructed key id: %i", key_id);
-    ESP_LOG_BUFFER_HEX("KEY RECONSTRUCTED HEX", reconstructed_key, sizeof(key_128b));
+    int status = add_key_to_cache(key_cache, reconstructed_key, key_id);
+    if (status == 0)
+    {
+        ESP_LOGI(DISTRIBUATION_TASK_NAME, "Key has been added to the cache!");
+        ESP_LOGI(DISTRIBUATION_TASK_NAME, "Reconstructed key id: %i", key_id);
+        ESP_LOG_BUFFER_HEX("KEY RECONSTRUCTED HEX", reconstructed_key, sizeof(key_128b));
+    }
+    else
+    {
+        ESP_LOGE(DISTRIBUATION_TASK_NAME, "Key has not been added to the cache!");
+    }
+}
+
+int init_dispatcher_resources()
+{
+    int status = 0;
+
+    ringBuffer = xRingbufferCreate(BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
+    if (ringBuffer == NULL) {
+        status = -1;
+        ESP_LOGE(DIST_LOG_GROUP, "Ring buffer allocation failed!");
+    }
+
+    
+    if (create_key_cache(key_cache, key_cache_size) != 0 )
+    {
+        status = -2;
+        ESP_LOGE(DIST_LOG_GROUP, "Key cache creation failed!");
+    }
+    
+    if (init_key_cache(key_cache) != 0)
+    {
+        status = -3;
+        ESP_LOGE(DIST_LOG_GROUP, "Key cache init failed!");
+    }
+    
+    return status;
+
 }
 
 void DispatcherTaskMain();
@@ -57,6 +96,15 @@ void queue_pdu_for_dispatching(ble_broadcast_pdu* pdu)
 }
 
 void start_up_dispatcher(void) {
+
+    bool is_initialized = init_dispatcher_resources() == 0 ? true : false;
+
+    if (is_initialized == false)
+    {
+        ESP_LOGE(DIST_LOG_GROUP, "Init failed! :(");
+        return;
+    }
+
     if (xDistribuationTask == NULL)
     {
         BaseType_t  taskCreateResult = xTaskCreatePinnedToCore(
@@ -76,6 +124,7 @@ void start_up_dispatcher(void) {
         else
         {
             ESP_LOGI(DIST_LOG_GROUP, "Task was created successfully! :)");
+            start_up_key_reconstructor();
             register_callback_to_key_reconstruction(key_reconstruction_complete);
         }
     
@@ -83,10 +132,17 @@ void start_up_dispatcher(void) {
 
 }
 
-void PassPduToHigherLayers(ble_broadcast_pdu * pdu)
+void add_to_reconstructor(ble_broadcast_pdu * pdu)
 {
     beacon_pdu_data *pdu_beacon = (beacon_pdu_data *) pdu->data;
-    queue_key_for_reconstruction(pdu_beacon->bcd.key_id, pdu_beacon->bcd.key_fragment_no, pdu_beacon->bcd.enc_key_fragment, pdu_beacon->bcd.key_fragment_hmac, pdu_beacon->bcd.xor_seed);
+    if (is_key_in_cache(key_cache, pdu_beacon->bcd.key_id) == false)
+    {
+        queue_key_for_reconstruction(pdu_beacon->bcd.key_id, pdu_beacon->bcd.key_fragment_no, pdu_beacon->bcd.enc_key_fragment, pdu_beacon->bcd.key_fragment_hmac, pdu_beacon->bcd.xor_seed);
+    }
+    else
+    {   
+        ESP_LOGI(DISTRIBUATION_TASK_NAME, "Key is already in cache!");
+    }
 }
 
 void LogPduData(beacon_pdu_data * pdu)
@@ -102,10 +158,6 @@ void LogPduData(beacon_pdu_data * pdu)
 
 void DispatcherTaskMain(void *arg)
 {
-    ringBuffer = xRingbufferCreate(BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
-    if (ringBuffer == NULL) {
-        ESP_LOGE(DIST_LOG_GROUP, "Ring buffer allocation failed!");
-    }
 
     while (1)
     {
@@ -120,9 +172,7 @@ void DispatcherTaskMain(void *arg)
 
             if (true == is_pdu_in_beacon_pdu_format(pdu_struct->data, pdu_struct->data_len))
             {
-                // beacon_pdu_data *pdu_beacon = (beacon_pdu_data *) pdu_struct->data;
-                // LogPduData(pdu_beacon);
-                PassPduToHigherLayers(pdu_struct);
+                add_to_reconstructor(pdu_struct);
             }
 
             // Return the memory to the ring buffer

@@ -3,7 +3,6 @@
 #include "esp_gap_ble_api.h"
 #include "beacon_pdu_data.h"
 #include "dispatcher.h"
-#include "key_reconstructor.h"
 
 static const char * BLE_GAP_LOG_GROUP = "BLE_RECEIVER";
 
@@ -84,7 +83,6 @@ void ble_appRegister(void)
  void ble_start_receiver(void)
 {
     start_up_dispatcher();
-    start_up_key_reconstructor();
     ble_appRegister();
     esp_ble_gap_set_scan_params(&default_ble_scan_params);
 }

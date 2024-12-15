@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "ble-broadcast-authentication-receiver",
-    "project_version":    "9cf8d82-dirty",
+    "project_version":    "0ab64db-dirty",
     "project_path":       "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication",
     "idf_path":           "C:/esp-idf",
     "build_dir":          "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/build",
@@ -100,7 +100,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/build/esp-idf/ble_receiver/libble_receiver.a",
-            "sources": [ "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/pdu_decryptor.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/dispatcher.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/key_reconstructor.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/key_management.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/ble_receiver.c" ],
+            "sources": [ "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/key_cache.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/pdu_decryptor.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/dispatcher.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/key_reconstructor.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/key_management.c", "C:/GitHub/MyRepos/esp32-ble-broadcast-authentication/ble-broadcast-authentication/components/ble_receiver/ble_receiver.c" ],
             "include_dirs": [ "." ]
         },
         "ble_sender": {

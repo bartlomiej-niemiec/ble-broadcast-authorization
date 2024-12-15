@@ -1,8 +1,12 @@
-#include "ble_sender.h"
-#include "ble_receiver.h"
 #include "ble_common.h"
 
 #define RECEIVER
+
+#ifdef RECEIVER
+    #include "ble_receiver.h"
+#else
+    #include "ble_sender.h"
+#endif
 
 void app_main(void)
 {
