@@ -1,6 +1,6 @@
 #include "ble_common.h"
 
-#define RECEIVER
+#define SENDER
 
 #ifdef RECEIVER
     #include "ble_receiver.h"
@@ -11,9 +11,9 @@
 void app_main(void)
 {
     ble_init();
-    #ifdef SENDER
-        ble_start_sender();
-    #else
+    #ifdef RECEIVER
         ble_start_receiver();
+    #else
+        ble_start_sender();
     #endif
 }

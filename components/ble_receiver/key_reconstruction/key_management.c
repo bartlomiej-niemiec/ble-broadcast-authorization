@@ -36,15 +36,6 @@ key_reconstruction_collection* create_new_key_collection(const size_t key_collec
     return p_key_collection;
 }
 
-void init_key_management(key_management* km)
-{
-    memset((void *) &(km->key), 0, sizeof(key_128b));
-    memset((void *) &(km->key_fragments), 0, sizeof(key_splitted));
-    km->key_id = 0;
-    km->no_collected_key_fragments = 0;
-    memset((void *) &(km->decrypted_key_fragments), 0, sizeof(km->decrypted_key_fragments));
-}
-
 void remove_key_from_collection(key_reconstruction_collection* key_collection, uint8_t key_id)
 {
     if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
@@ -52,7 +43,7 @@ void remove_key_from_collection(key_reconstruction_collection* key_collection, u
         int key_index_in_collection = get_key_index_in_collection(key_collection, key_id);
         if (key_index_in_collection >= 0)
         {
-            init_key_management(&(key_collection->km[key_index_in_collection]));
+            memset(&(key_collection->km[key_index_in_collection]), 0, sizeof(key_management));
         }
         xSemaphoreGive(key_collection->xMutex);
     }
