@@ -16,7 +16,7 @@ int create_key_cache(key_reconstruction_cache ** key_cache, const uint8_t cache_
         (*key_cache)->map = (key_reconstruction_map* ) malloc(sizeof(key_reconstruction_map) * cache_size);
         (*key_cache)->cache_size = cache_size;
         (*key_cache)->last_key_id_used = -1;
-        (*key_cache)->last_key_id_used = -1;
+        (*key_cache)->last_key_index_in_map = -1;
         (*key_cache)->xMutexCacheAccess = NULL;
         
         if ((*key_cache)->map == NULL)
@@ -192,6 +192,7 @@ const key_128b* get_key_from_cache(key_reconstruction_cache * const key_cache, u
         if (key_id == key_cache->last_key_id_used && key_cache->last_key_index_in_map >= 0)
         {
             key = &(key_cache->map[key_cache->last_key_index_in_map].key);
+            xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
             return key;
         }
 

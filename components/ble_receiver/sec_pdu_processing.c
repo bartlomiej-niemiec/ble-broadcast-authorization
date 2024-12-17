@@ -11,18 +11,19 @@
 
 #include "esp_log.h"
 
+#include <limits.h>
+
 #define SEC_PROCESSING_TASK_SIZE 4096
 #define SEC_PROCESSING_TASK_PRIORITY 5
 #define SEC_PROCESSING_TASK_CORE 1
 #define MAX_DEFERRED_QUEUE_ELEMENTS 100
-#define MAX_PROCESSING_QUEUE_ELEMENTS 20
+#define MAX_PROCESSING_QUEUE_ELEMENTS 100
 #define KEY_CACHE_SIZE 3
-#define SEC_PROCESSING_TASK_DELAY_MS 30
-#define SEC_PROCESSING_TASK_DELAY_SYS_TICKS pdMS_TO_TICKS(SEC_PROCESSING_TASK_DELAY_MS)
 
-#define QUEUE_TIMEOUT_MS 40
+#define MAX_PROCESSED_PDUS_AT_ONCE 20
 
-#define DELAY_PROCESS_DEFERRED_Q 10
+#define QUEUE_TIMEOUT_MS 50
+#define QUEUE_TIMEOUT_SYS_TICKS pdMS_TO_TICKS(QUEUE_TIMEOUT_MS)
 
 static const char * SEC_PDU_PROC_LOG = "SEC_PDU_PROCESSING";
 static const char* SEC_PROCESSING_TASK_NAME = "SEC_PDU_PROCESSING TASK";
@@ -39,115 +40,163 @@ typedef struct {
     EventGroupHandle_t eventGroup;
     key_reconstruction_cache *key_cache;
     const uint8_t key_cache_size;
-    volatile bool is_sec_pdu_processing_initialised;
+    bool is_sec_pdu_processing_initialised;
+    uint8_t deferred_queue_count;
 } sec_pdu_processing_control;
 
 static sec_pdu_processing_control sec_pdu_st = {
     .xSecProcessingTask = NULL,
     .deferredQueue = NULL,
     .processingQueue = NULL,
+    .eventGroup = NULL,
     .key_cache = NULL,
     .key_cache_size = KEY_CACHE_SIZE,
-    .is_sec_pdu_processing_initialised = false
+    .is_sec_pdu_processing_initialised = false,
+    .deferred_queue_count = 0
 };
 
-int process_deferred_queue(const key_128b * const key, uint16_t max_processed_packets);
+int process_deferred_queue_new_key();
+int process_deferred_queue();
 void decrypt_and_print_msg(const key_128b * const key, beacon_pdu_data * pdu);
 int add_to_deferred_queue(beacon_pdu_data* pdu);
 int init_sec_processing_resources();
+void handle_event_new_pdu();
+void handle_event_key_reconstructed();
+void handle_event_process_deferred_pdus();
 bool is_pdu_in_deferred_queue();
-
-
+void decrement_deferred_queue_counter();
+void increment_deferred_queue_counter();
 
 void sec_processing_main(void *arg)
 {
-    beacon_pdu_data pdu;
-    const key_128b * key = NULL;
-    const uint16_t MAX_PROCESSED_PDUS_AT_ONCE = 10;
-    uint8_t key_id = 0;
+
     while (1)
     {
         // Wait for events: either a new PDU or key reconstruction completion
         EventBits_t events = xEventGroupWaitBits(sec_pdu_st.eventGroup,
-                                                 EVENT_NEW_PDU | EVENT_KEY_RECONSTRUCTED,
+                                                 EVENT_NEW_PDU | EVENT_KEY_RECONSTRUCTED | EVENT_PROCESS_DEFFERRED_PDUS,
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
 
-
-        if (events & EVENT_NEW_PDU) {
-            int counter = 0;
-            bool packets_in_deferred_queue = is_pdu_in_deferred_queue();
-            while (xQueueReceive(sec_pdu_st.processingQueue, (void *)&pdu, 0) == pdTRUE && MAX_PROCESSED_PDUS_AT_ONCE > counter++) {
-                if (key == NULL && key_id != pdu.bcd.key_id) {
-                    queue_key_for_reconstruction(pdu.bcd.key_id, pdu.bcd.key_fragment_no, 
-                                                  pdu.bcd.enc_key_fragment, pdu.bcd.key_fragment_hmac, 
-                                                  pdu.bcd.xor_seed);
-                    add_to_deferred_queue(&pdu);
-                }
-                else if (key != NULL && key_id == pdu.bcd.key_id && packets_in_deferred_queue == true)
-                {
-                    add_to_deferred_queue(&pdu);
-                }
-                else
-                {
-                    decrypt_and_print_msg(key, &pdu);
-                }
-                vTaskDelay(pdMS_TO_TICKS(DELAY_PROCESS_DEFERRED_Q));
-            }
-
-            if (key != NULL && key_id == pdu.bcd.key_id && packets_in_deferred_queue == true)
-            {
-                xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
-            }
-        }
-
         if (events & EVENT_KEY_RECONSTRUCTED) {
-
-            key = get_key_from_cache(sec_pdu_st.key_cache, pdu.bcd.key_id);
-            key_id = pdu.bcd.key_id;
-            process_deferred_queue(key, MAX_PROCESSED_PDUS_AT_ONCE);
-            if (is_pdu_in_deferred_queue() == true)
-            {
-                xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
-            }
+            handle_event_key_reconstructed();
         }
-
 
         if (events & EVENT_PROCESS_DEFFERRED_PDUS)
         {
-            process_deferred_queue(key, MAX_PROCESSED_PDUS_AT_ONCE);
-            if (is_pdu_in_deferred_queue() == true)
-            {
-                xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
-            }
+            handle_event_process_deferred_pdus();
+        }
+
+        if (events & EVENT_NEW_PDU) {
+            handle_event_new_pdu();
         }
 
     }
 }
 
-bool is_pdu_in_deferred_queue()
+void handle_event_new_pdu()
 {
-    beacon_pdu_data pdu;
-    return xQueuePeek(sec_pdu_st.deferredQueue, ( void * ) &pdu, QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE;
-}
-
-int process_deferred_queue(const key_128b * const key, uint16_t max_processed_packets)
-{
-    if (is_pdu_in_deferred_queue() == false)
+    int batchCount = 0;
+    beacon_pdu_data pduBatch[MAX_PROCESSED_PDUS_AT_ONCE] = {0};
+    while (batchCount < MAX_PROCESSED_PDUS_AT_ONCE &&
+        xQueueReceive(sec_pdu_st.processingQueue, (void *)&pduBatch[batchCount], 0) == pdTRUE)
     {
-        return 0;
+        batchCount++;
     }
 
-    uint8_t nonce[NONCE_SIZE] = {0};
-    uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
-    beacon_pdu_data pdu;
+    const key_128b * key = NULL;
+
+    bool is_pdu_in_deferred_q = is_pdu_in_deferred_queue();
+
+    for (int i = 0; i < batchCount; i++)
+    {
+        key = get_key_from_cache(sec_pdu_st.key_cache, pduBatch[i].bcd.key_id);
+        if (key == NULL ) {
+            queue_key_for_reconstruction(pduBatch[i].bcd.key_id, pduBatch[i].bcd.key_fragment_no, 
+                                        pduBatch[i].bcd.enc_key_fragment, pduBatch[i].bcd.key_fragment_hmac, 
+                                        pduBatch[i].bcd.xor_seed);
+            add_to_deferred_queue(&pduBatch[i]);
+        }
+        else if (key != NULL && is_pdu_in_deferred_q)
+        {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            add_to_deferred_queue(&pduBatch[i]);
+        }
+        else
+        {
+            decrypt_and_print_msg(key, &pduBatch[i]);
+        }
+            
+    }
+
+    if (is_pdu_in_deferred_q)
+    {
+        xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
+    }
+}
+
+void handle_event_key_reconstructed()
+{
+    process_deferred_queue();
+    if (is_pdu_in_deferred_queue())
+    {
+        xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
+    }
+}
+
+void handle_event_process_deferred_pdus()
+{
+    process_deferred_queue();
+    if (is_pdu_in_deferred_queue())
+    {
+        xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
+    }
+}
+
+int process_deferred_queue()
+{
+    beacon_pdu_data pduBatch[MAX_PROCESSED_PDUS_AT_ONCE] = {0};
+
     int counter = 0;
-    while (xQueueReceive(sec_pdu_st.deferredQueue, (void *)&pdu, 0) == pdTRUE && max_processed_packets > counter++) {
-        build_nonce(nonce, &(pdu.marker), pdu.bcd.key_fragment_no, pdu.bcd.key_id, pdu.bcd.xor_seed);
-        aes_ctr_decrypt_payload(pdu.payload, sizeof(pdu.payload), key->key, nonce, output);
-        ESP_LOGI(SEC_PDU_PROC_LOG, "STRING MESSAGE DECRYPTED: %s", (char *) output);
+    while (xQueueReceive(sec_pdu_st.deferredQueue, (void *)&pduBatch[counter], QUEUE_TIMEOUT_SYS_TICKS) == pdTRUE && MAX_PROCESSED_PDUS_AT_ONCE > counter) {
+        decrement_deferred_queue_counter();
+        counter++;
+    }
+
+    for (int i = 0; i < counter; i++)
+    {
+        const key_128b *key = get_key_from_cache(sec_pdu_st.key_cache, pduBatch[i].bcd.key_id);
+        if (key != NULL)
+        {
+            decrypt_and_print_msg(key, &pduBatch[i]);
+        }
+        else
+        {
+            add_to_deferred_queue(&pduBatch[i]);
+        }
     }
 
     return counter;
+}
+
+inline bool is_pdu_in_deferred_queue()
+{
+    return sec_pdu_st.deferred_queue_count > 0;
+}
+
+inline void increment_deferred_queue_counter()
+{
+    if (sec_pdu_st.deferred_queue_count < UCHAR_MAX)
+    {
+        sec_pdu_st.deferred_queue_count++;
+    }
+}
+
+inline void decrement_deferred_queue_counter()
+{
+    if (sec_pdu_st.deferred_queue_count > 0)
+    {
+        sec_pdu_st.deferred_queue_count--;
+    }
 }
 
 void decrypt_and_print_msg(const key_128b * const key, beacon_pdu_data * pdu)
@@ -168,7 +217,12 @@ int add_to_deferred_queue(beacon_pdu_data* pdu)
     {
         if (pdu != NULL)
         {
-            stats = xQueueSend(sec_pdu_st.deferredQueue, ( void * ) pdu, ( TickType_t ) 0 );
+            stats = xQueueSend(sec_pdu_st.deferredQueue, ( void * ) pdu, QUEUE_TIMEOUT_SYS_TICKS);
+            if (stats == pdPASS) {
+                increment_deferred_queue_counter();
+            } else {
+                ESP_LOGE(SEC_PDU_PROC_LOG, "Deferred queue is full!");
+            }
         }
     }
 
@@ -306,17 +360,9 @@ int process_sec_pdu(beacon_pdu_data* pdu)
     {   
         if (pdu != NULL)
         {
-            stats = xQueueSend(sec_pdu_st.processingQueue, ( void * ) pdu, ( TickType_t ) 0 );
+            stats = xQueueSend(sec_pdu_st.processingQueue, ( void * ) pdu, QUEUE_TIMEOUT_SYS_TICKS);
         }
-
-        if (stats != pdPASS)
-        {
-            ESP_LOGE(SEC_PDU_PROC_LOG, "Process Queue is full!");
-        }
-        else
-        {
-            xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_NEW_PDU);
-        }
+        xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_NEW_PDU);
     }
 
     return stats;

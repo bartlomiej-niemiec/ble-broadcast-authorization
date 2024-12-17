@@ -1,11 +1,11 @@
-#ifndef KEY_MANEGEMENT_H
-#define KEY_MANEGEMENT_H
+#ifndef KEY_MANAGEMENT_H
+#define KEY_MANAGEMENT_H
 
 #include <stdbool.h>
 #include <stdint.h>
 #include "crypto.h"
-
-#define KEY_COLLECTIONS_SIZE 3
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 typedef struct{
     key_splitted key_fragments;
@@ -15,18 +15,26 @@ typedef struct{
     key_128b key;
 } key_management;
 
-void remove_key_from_collection(uint8_t key_id);
+typedef struct {
+    key_management * km;
+    size_t key_management_size;
+    SemaphoreHandle_t xMutex;
+} key_reconstruction_collection;
 
-bool reconstruct_key_from_key_fragments(key_128b* km, uint8_t key_id);
+key_reconstruction_collection* create_new_key_collection(size_t key_collection_size);
 
-bool is_key_in_collection(uint8_t key_id);
+void remove_key_from_collection(key_reconstruction_collection* key_collection, uint8_t key_id);
 
-bool add_new_key_to_collection(uint8_t key_id);
+bool reconstruct_key_from_key_fragments(key_reconstruction_collection* key_collection, key_128b* km, uint8_t key_id);
 
-void add_fragment_to_key_management(uint8_t key_id, uint8_t *fragment, uint8_t key_fragment_id);
+bool is_key_in_collection(key_reconstruction_collection* key_collection, uint8_t key_id);
 
-bool is_key_available(uint8_t key_id);
+bool add_new_key_to_collection(key_reconstruction_collection* key_collection, uint8_t key_id);
 
-bool is_key_fragment_decrypted(uint8_t key_id, uint8_t key_fragment);
+void add_fragment_to_key_management(key_reconstruction_collection* key_collection, uint8_t key_id, uint8_t *fragment, uint8_t key_fragment_id);
+
+bool is_key_available(key_reconstruction_collection* key_collection, uint8_t key_id);
+
+bool is_key_fragment_decrypted(key_reconstruction_collection* key_collection, uint8_t key_id, uint8_t key_fragment);
 
 #endif

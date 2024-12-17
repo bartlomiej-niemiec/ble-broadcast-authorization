@@ -37,4 +37,6 @@ uint8_t get_random_seed();
 
 void calculate_hmac_of_fragment(uint8_t *key_fragment, uint8_t *encrypted_fragment, uint8_t *hmac_output);
 
+int crypto_secure_memcmp(const void *a, const void *b, size_t size);
+
 #endif

@@ -8,19 +8,22 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_err.h"
 
 #define KEY_RECONSTRUCTION_TASK_SIZE 4096
 #define RECONSTRUCTOR_TASK_CORE 1
 #define RECONSTRUCTOR_TASK_PRIORITY 10
 
-#define TASK_DELAY_MS 100
-#define TASK_DELAY_SYSTICK (pdMS_TO_TICKS(TASK_DELAY_MS))
-
 #define MAX_ELEMENTS_IN_QUEUE 15
 
 #define QUEUE_TIMEOUT_MS 20
 
-#define KEY_CACHE_MAP_SIZE 4
+#define KEY_COLLECTION_SIZE 4
+
+#define MAX_KEY_PROCESSES_AT_ONCE 10
+
+// Event group flags
+#define EVENT_NEW_KEY_FARGMENT_IN_QUEUE (1 << 0)
 
 typedef struct{
     uint16_t key_id;    
@@ -28,64 +31,85 @@ typedef struct{
     uint8_t encrypted_key_fragment[KEY_FRAGMENT_SIZE];
     uint8_t key_hmac[HMAC_SIZE];
     uint8_t xor_seed;
-} __attribute__((aligned(4))) reconstructor_queue_element;;
+} __attribute__((aligned(4))) reconstructor_queue_element;
 
 static const char* RECONSTRUCTION_TASK_NAME = "KEY_RECONSTRUCTION_TASK";
 static const char* REC_LOG_GROUP = "RECONSTRUCTION TASK";
 
 typedef struct {
-    TaskHandle_t *xRecontructionKeyTask;
+    TaskHandle_t xRecontructionKeyTask;
     QueueHandle_t xQueueKeyReconstruction;
-    volatile bool is_reconstructor_resources_init;
+    EventGroupHandle_t eventGroup;
+    bool is_reconstructor_resources_init;
     key_reconstruction_complete_cb key_rec_cb;
+    key_reconstruction_collection * key_collection;
 } key_reconstructor_control;
 
 static key_reconstructor_control st_reconstructor_control = {
     .xRecontructionKeyTask = NULL,
     .xQueueKeyReconstruction = NULL,
+    .eventGroup = NULL,
     .is_reconstructor_resources_init = false,
-    .key_rec_cb = NULL
+    .key_rec_cb = NULL,
+    .key_collection = NULL
 };
 
 void process_and_store_key_fragment(reconstructor_queue_element * q_element);
 bool init_reconstructor_resources();
+void handle_event_new_key_fragment_in_queue();
 
 void reconstructor_main(void *arg)
 {
     ESP_LOGI(REC_LOG_GROUP, "Starting up key reconstructor task");
-
-    reconstructor_queue_element q_element;
-
     while (1)
     {
-        if (xQueueReceive(st_reconstructor_control.xQueueKeyReconstruction, ( void * ) &q_element, QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE)
-        {
-            if (is_key_in_collection(q_element.key_id) == false)
-            {
-                add_new_key_to_collection(q_element.key_id);
-                ESP_LOGI(REC_LOG_GROUP, "Adding new key to collection for reconstruction: %i", q_element.key_id);
-            }
+         // Wait for events: either a new PDU or key reconstruction completion
+        EventBits_t events = xEventGroupWaitBits(st_reconstructor_control.eventGroup,
+                                                 EVENT_NEW_KEY_FARGMENT_IN_QUEUE,
+                                                 pdTRUE, pdFALSE, portMAX_DELAY);
 
-            if (is_key_fragment_decrypted(q_element.key_id, q_element.key_fragment_no) == false)
-            {
-                process_and_store_key_fragment(&q_element);
-            }
-
-            if (is_key_available(q_element.key_id) == true)
-            {
-                key_128b reconstructed_key = {0};
-                reconstruct_key_from_key_fragments(&reconstructed_key, q_element.key_id);
-                if (st_reconstructor_control.key_rec_cb != NULL)
-                {
-                    st_reconstructor_control.key_rec_cb(q_element.key_id, &reconstructed_key);
-                }
-                remove_key_from_collection(q_element.key_id);
-            }
+        if (events & EVENT_NEW_KEY_FARGMENT_IN_QUEUE) {
+            handle_event_new_key_fragment_in_queue();
         }
 
-        vTaskDelay(TASK_DELAY_SYSTICK);
     }
 }
+
+void handle_event_new_key_fragment_in_queue()
+{
+    reconstructor_queue_element keyFragmentBatch[MAX_KEY_PROCESSES_AT_ONCE];
+    int counter = 0;
+    while (counter < MAX_KEY_PROCESSES_AT_ONCE && xQueueReceive(st_reconstructor_control.xQueueKeyReconstruction, ( void * ) &keyFragmentBatch[counter], QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE)
+    {
+        counter++;
+    }
+
+    for (int i = 0; i < counter; i++)
+    {
+        if (is_key_in_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id) == false)
+        {
+            add_new_key_to_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id);
+            ESP_LOGI(REC_LOG_GROUP, "Adding new key to collection for reconstruction: %i", keyFragmentBatch[i].key_id);
+        }
+
+        if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id, keyFragmentBatch[i].key_fragment_no) == false)
+        {
+            process_and_store_key_fragment(&keyFragmentBatch[i]);
+        }
+
+        if (is_key_available(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id) == true)
+        {
+            key_128b reconstructed_key = {0};
+            reconstruct_key_from_key_fragments(st_reconstructor_control.key_collection, &reconstructed_key, keyFragmentBatch[i].key_id);
+            if (st_reconstructor_control.key_rec_cb != NULL)
+            {
+                st_reconstructor_control.key_rec_cb(keyFragmentBatch[i].key_id, &reconstructed_key);
+            }
+            remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id);
+        }
+    }
+}
+
 
 int start_up_key_reconstructor(void) {
 
@@ -102,7 +126,7 @@ int start_up_key_reconstructor(void) {
                 (uint32_t) KEY_RECONSTRUCTION_TASK_SIZE,
                 NULL,
                 (UBaseType_t) RECONSTRUCTOR_TASK_PRIORITY,
-                st_reconstructor_control.xRecontructionKeyTask,
+                &st_reconstructor_control.xRecontructionKeyTask,
                 RECONSTRUCTOR_TASK_CORE
                 );
         
@@ -134,19 +158,24 @@ void register_callback_to_key_reconstruction(key_reconstruction_complete_cb cb)
 
 bool init_reconstructor_resources()
 {
-    bool queue_init_success = false;
+    st_reconstructor_control.eventGroup = xEventGroupCreate();
+
+    if(st_reconstructor_control.eventGroup == NULL)
+    {
+        return false;
+    }
 
     st_reconstructor_control.xQueueKeyReconstruction = xQueueCreate(MAX_ELEMENTS_IN_QUEUE, sizeof(reconstructor_queue_element));
 
-    if (st_reconstructor_control.xQueueKeyReconstruction == NULL) {
-        ESP_LOGE(REC_LOG_GROUP, "Failed to create PDU Queue!");
+    if (st_reconstructor_control.xQueueKeyReconstruction == NULL)
+    {
         return false;
-    } else {
-        queue_init_success = true;
     }
 
-    if (!queue_init_success) {
-        vQueueDelete(st_reconstructor_control.xQueueKeyReconstruction);
+    st_reconstructor_control.key_collection = create_new_key_collection(KEY_COLLECTION_SIZE);
+
+    if (st_reconstructor_control.xQueueKeyReconstruction == NULL)
+    {
         return false;
     }
 
@@ -157,10 +186,9 @@ bool init_reconstructor_resources()
 RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uint8_t key_fragment_no, uint8_t * encrypted_key_fragment, uint8_t * key_hmac, uint8_t xor_seed)
 {
     RECONSTRUCTION_QUEUEING_STATUS result = QUEUED_SUCCESS;
-
     if (st_reconstructor_control.is_reconstructor_resources_init == true)
     {
-        if (is_key_available(key_id) == true)
+        if (is_key_available(st_reconstructor_control.key_collection, key_id) == true)
         {
             ESP_LOGI(REC_LOG_GROUP, "Key ID %d already in cache, skipping queue.", key_id);
             return QUEUED_FAILED_KEY_ALREADY_RECONSTRUCTED; // Key already reconstructed       
@@ -172,7 +200,7 @@ RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uin
         }
         else
         {
-            if (is_key_fragment_decrypted(key_id, key_fragment_no) == false)
+            if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, key_id, key_fragment_no) == false)
             {
                 reconstructor_queue_element q_in = {};
                 q_in.key_id = key_id;
@@ -182,11 +210,15 @@ RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uin
                 memcpy(q_in.encrypted_key_fragment, encrypted_key_fragment, KEY_FRAGMENT_SIZE);
                 memcpy(q_in.key_hmac, key_hmac, HMAC_SIZE);
 
-                int queue_result = xQueueSend(st_reconstructor_control.xQueueKeyReconstruction, (void *)&q_in, (TickType_t)0);
+                int queue_result = xQueueSend(st_reconstructor_control.xQueueKeyReconstruction, (void *)&q_in, QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS);
                 
                 if (queue_result != pdPASS) {
                     ESP_LOGE(REC_LOG_GROUP, "Queue send failed for key_id: %d", key_id);
                     result = QUEUED_FAILED_NO_SPACE;
+                }
+                else
+                {
+                    xEventGroupSetBits(st_reconstructor_control.eventGroup, EVENT_NEW_KEY_FARGMENT_IN_QUEUE);
                 }
             }
             else
@@ -214,9 +246,9 @@ void process_and_store_key_fragment(reconstructor_queue_element * q_element)
 
     calculate_hmac_of_fragment(decrypted_key_fragment_buffer, q_element->encrypted_key_fragment, calculated_hmac_buffer);
 
-    if (memcmp(calculated_hmac_buffer, q_element->key_hmac, sizeof(calculated_hmac_buffer)) == 0)
+    if (crypto_secure_memcmp(calculated_hmac_buffer, q_element->key_hmac, sizeof(calculated_hmac_buffer)) == 0)
     {
-        add_fragment_to_key_management(q_element->key_id, decrypted_key_fragment_buffer, q_element->key_fragment_no);
+        add_fragment_to_key_management(st_reconstructor_control.key_collection, q_element->key_id, decrypted_key_fragment_buffer, q_element->key_fragment_no);
         ESP_LOGI(REC_LOG_GROUP, "Successfully reconstructed key fragment no: %i", q_element->key_fragment_no);
     }
 }

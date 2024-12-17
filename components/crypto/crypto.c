@@ -147,3 +147,17 @@ void calculate_hmac_of_fragment(uint8_t *key_fragment, uint8_t *encrypted_fragme
     // Calculate HMAC of the encrypted fragment using the decrypted key fragment as the key
     calculate_hmac(key_fragment, KEY_FRAGMENT_SIZE, encrypted_fragment, KEY_FRAGMENT_SIZE, hmac_output);
 }
+
+// Constant-time memory comparison
+int crypto_secure_memcmp(const void *a, const void *b, size_t size)
+{
+    const uint8_t *p1 = (const uint8_t *)a;
+    const uint8_t *p2 = (const uint8_t *)b;
+    uint8_t result = 0;
+
+    for (size_t i = 0; i < size; i++) {
+        result |= p1[i] ^ p2[i]; // XOR and accumulate differences
+    }
+
+    return result == 0 ? 0 : 1; // Return 0 if identical, 1 otherwise
+}
