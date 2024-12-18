@@ -312,19 +312,23 @@ int remove_lru_key_from_cache(key_reconstruction_cache * const key_cache)
 {
     if (key_cache == NULL)
     {
-        return -3;
+        return -1;
     }
 
     int min_index = 0;
     uint32_t min_timestamp = key_cache->map[0].last_used_timestamp;
+    uint8_t removed_key_id = -1;
     for (int i = 0; i < key_cache->cache_size; i++)
     {
         if (key_cache->map[i].last_used_timestamp < min_timestamp)
         {
             min_timestamp = key_cache->map[i].last_used_timestamp;
             min_index = i;
+            removed_key_id = key_cache->map[i].key_id;
         }
     }
 
-    return remove_key_from_cache_at_index(key_cache, min_index);
+    remove_key_from_cache_at_index(key_cache, min_index);
+
+    return removed_key_id;
 }

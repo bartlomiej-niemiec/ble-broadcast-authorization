@@ -41,6 +41,7 @@ typedef struct {
     key_reconstruction_cache *key_cache;
     const uint8_t key_cache_size;
     bool is_sec_pdu_processing_initialised;
+    int16_t recently_removed_key_id;
     uint8_t deferred_queue_count;
 } sec_pdu_processing_control;
 
@@ -52,6 +53,7 @@ static sec_pdu_processing_control sec_pdu_st = {
     .key_cache = NULL,
     .key_cache_size = KEY_CACHE_SIZE,
     .is_sec_pdu_processing_initialised = false,
+    .recently_removed_key_id = -1,
     .deferred_queue_count = 0
 };
 
@@ -170,8 +172,12 @@ int process_deferred_queue()
             decrypt_and_print_msg(key, &pduBatch[i]);
         }
         else
-        {
-            add_to_deferred_queue(&pduBatch[i]);
+        {   
+            /// Drop PDU from removed key
+            if (pduBatch[i].bcd.key_id != sec_pdu_st.recently_removed_key_id)
+            {
+                add_to_deferred_queue(&pduBatch[i]);
+            }
         }
     }
 
@@ -239,7 +245,7 @@ void key_reconstruction_complete(uint8_t key_id, const key_128b * const reconstr
     }
     else
     {
-        remove_lru_key_from_cache(sec_pdu_st.key_cache);
+        sec_pdu_st.recently_removed_key_id = remove_lru_key_from_cache(sec_pdu_st.key_cache);
         status = add_key_to_cache(sec_pdu_st.key_cache, reconstructed_key, key_id);
         if (status == 0)
         {
