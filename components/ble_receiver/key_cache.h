@@ -10,7 +10,8 @@
 typedef struct {
     key_128b key;
     uint8_t key_id;
-    uint32_t last_used_timestamp;
+    uint64_t last_used_timestamp;
+    uint8_t rollover;
 } key_reconstruction_map;
 
 typedef struct {
