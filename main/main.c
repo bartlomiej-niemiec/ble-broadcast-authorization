@@ -1,6 +1,6 @@
 #include "ble_common.h"
 
-#define SENDER
+#define RECEIVER
 
 #ifdef RECEIVER
     #include "ble_receiver.h"

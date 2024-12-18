@@ -18,7 +18,7 @@
 #define SEC_PROCESSING_TASK_CORE 1
 #define MAX_DEFERRED_QUEUE_ELEMENTS 100
 #define MAX_PROCESSING_QUEUE_ELEMENTS 100
-#define KEY_CACHE_SIZE 7
+#define KEY_CACHE_SIZE 3
 
 #define MAX_PROCESSED_PDUS_AT_ONCE 20
 
@@ -239,7 +239,18 @@ void key_reconstruction_complete(uint8_t key_id, const key_128b * const reconstr
     }
     else
     {
-        ESP_LOGE(SEC_PDU_PROC_LOG, "Key has not been added to the cache!");
+        remove_lru_key_from_cache(sec_pdu_st.key_cache);
+        status = add_key_to_cache(sec_pdu_st.key_cache, reconstructed_key, key_id);
+        if (status == 0)
+        {
+            ESP_LOGI(SEC_PDU_PROC_LOG, "Removed LRU key from cache!");
+            ESP_LOGI(SEC_PDU_PROC_LOG, "Key has been added to the cache!");
+            xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_KEY_RECONSTRUCTED);
+        }
+        else
+        {
+            ESP_LOGE(SEC_PDU_PROC_LOG, "Key has not been added to the cache!");
+        }
     }
 }
 

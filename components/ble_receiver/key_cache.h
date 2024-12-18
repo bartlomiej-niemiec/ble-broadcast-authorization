@@ -10,6 +10,7 @@
 typedef struct {
     key_128b key;
     uint8_t key_id;
+    uint32_t last_used_timestamp;
 } key_reconstruction_map;
 
 typedef struct {
@@ -27,6 +28,8 @@ int init_key_cache(key_reconstruction_cache * key_cache);
 int add_key_to_cache(key_reconstruction_cache * const key_cache, key_128b * key, uint8_t key_id);
 
 int remove_key_from_cache(key_reconstruction_cache * const key_cache, uint8_t key_id);
+
+int remove_lru_key_from_cache(key_reconstruction_cache * const key_cache);
 
 bool is_key_in_cache(key_reconstruction_cache * const key_cache, uint8_t key_id);
 

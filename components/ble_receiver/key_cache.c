@@ -1,6 +1,7 @@
 #include "key_cache.h"
 #include "esp_log.h"
 #include "string.h"
+#include "freertos/task.h"
 
 
 static const char *KEY_CACHE_LOG_GROUP = "KEY CACHE LOG";
@@ -62,6 +63,7 @@ int init_key_cache(key_reconstruction_cache * key_cache)
             for (int i = 0; i < key_cache->cache_size; i++)
             {
                 key_cache->map[i].key_id = 0;
+                key_cache->map[i].last_used_timestamp = 0;
                 memset(&(key_cache->map[i].key), 0, sizeof(key_cache->map[i].key));
             }
             xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
@@ -111,6 +113,7 @@ int add_key_to_cache(key_reconstruction_cache * const key_cache, key_128b * key,
         }
         else
         {
+            key_cache->map[first_free_index].last_used_timestamp = xTaskGetTickCount();
             key_cache->map[first_free_index].key_id = key_id;
             memcpy(&(key_cache->map[first_free_index].key), key, sizeof(key_cache->map[first_free_index].key));
             status = 0;
@@ -155,6 +158,7 @@ int remove_key_from_cache(key_reconstruction_cache * const key_cache, uint8_t ke
 
         if (key_index_in_map >= 0)
         {
+            key_cache->map[key_index_in_map].last_used_timestamp = 0;
             key_cache->map[key_index_in_map].key_id = 0;
             memset(&(key_cache->map[key_index_in_map].key), 0, sizeof(key_cache->map[key_index_in_map].key));
 
@@ -192,6 +196,7 @@ const key_128b* get_key_from_cache(key_reconstruction_cache * const key_cache, u
         if (key_id == key_cache->last_key_id_used && key_cache->last_key_index_in_map >= 0)
         {
             key = &(key_cache->map[key_cache->last_key_index_in_map].key);
+            key_cache->map[key_cache->last_key_index_in_map].last_used_timestamp = xTaskGetTickCount();
             xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
             return key;
         }
@@ -212,6 +217,7 @@ const key_128b* get_key_from_cache(key_reconstruction_cache * const key_cache, u
             key = &(key_cache->map[key_index_in_map].key);
             key_cache->last_key_id_used = key_id;
             key_cache->last_key_index_in_map = key_index_in_map;
+            key_cache->map[key_index_in_map].last_used_timestamp = xTaskGetTickCount();
         }
 
         xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
@@ -261,4 +267,64 @@ bool is_key_in_cache(key_reconstruction_cache * const key_cache, uint8_t key_id)
     }
 
     return status;
+}
+
+int remove_key_from_cache_at_index(key_reconstruction_cache * const key_cache, uint8_t index)
+{
+    int status = 0;
+
+    if (key_cache == NULL)
+    {
+        return -3;
+    }
+
+    if (xSemaphoreTake(key_cache->xMutexCacheAccess, portMAX_DELAY))
+    {
+
+        if (index > key_cache->cache_size)
+        {
+            status = -1;
+        }
+        else
+        {
+            uint8_t key_id = key_cache->map[index].key_id;
+            key_cache->map[index].last_used_timestamp = 0;
+            key_cache->map[index].key_id = 0;
+            memset(&(key_cache->map[index].key), 0, sizeof(key_cache->map[index].key));
+
+            if (key_id == key_cache->last_key_id_used)
+            {
+                key_cache->last_key_id_used = -1;
+                key_cache->last_key_index_in_map = -1;
+            }
+        }
+        xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
+    }
+    else
+    {
+        ESP_LOGE(KEY_CACHE_LOG_GROUP, "Failed to acquire mutex for cache access");
+    }
+
+    return status;
+}
+
+int remove_lru_key_from_cache(key_reconstruction_cache * const key_cache)
+{
+    if (key_cache == NULL)
+    {
+        return -3;
+    }
+
+    int min_index = 0;
+    uint32_t min_timestamp = key_cache->map[0].last_used_timestamp;
+    for (int i = 0; i < key_cache->cache_size; i++)
+    {
+        if (key_cache->map[i].last_used_timestamp < min_timestamp)
+        {
+            min_timestamp = key_cache->map[i].last_used_timestamp;
+            min_index = i;
+        }
+    }
+
+    return remove_key_from_cache_at_index(key_cache, min_index);
 }
