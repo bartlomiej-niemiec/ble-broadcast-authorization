@@ -17,7 +17,7 @@ typedef struct {
 
 ble_consumer_collection * create_ble_consumer_collection(const uint8_t collection_size, const uint8_t sender_key_cache_size);
 
-int add_consumer_to_collection(ble_consumer_collection * p_ble_consumer_collection, esp_bd_addr_t mac_address_arr);
+ble_consumer * add_consumer_to_collection(ble_consumer_collection *p_collection, esp_bd_addr_t mac_address);
 
 ble_consumer * get_ble_consumer_from_collection(ble_consumer_collection * p_ble_consumer_collection, esp_bd_addr_t mac_address_arr);
 

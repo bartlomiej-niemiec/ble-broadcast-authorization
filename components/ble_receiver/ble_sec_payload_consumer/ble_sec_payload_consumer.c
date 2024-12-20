@@ -1,1 +1,0 @@
-#include "ble_sec_payload_consumer.h"

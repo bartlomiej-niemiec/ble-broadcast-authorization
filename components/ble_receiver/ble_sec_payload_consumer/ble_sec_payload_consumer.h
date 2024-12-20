@@ -1,9 +1,0 @@
-#ifndef BLE_SEC_PAYLOAD_CONSUMER_H
-#define BLE_SEC_PAYLOAD_CONSUMER_H
-
-
-
-
-
-
-#endif

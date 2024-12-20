@@ -24,7 +24,7 @@ key_reconstruction_collection* create_new_key_collection(const size_t key_collec
             return NULL;
         }
 
-        p_key_collection->xMutex = xSemaphoreCreateMutex();
+        p_key_collection->xMutex = xSemaphoreCreateRecursiveMutex();
         if (p_key_collection->xMutex == NULL) {
             ESP_LOGE(KEY_MNGMT_GROUP, "Failed to create mutex for key collection!");
             free(p_key_collection->km);
@@ -38,7 +38,7 @@ key_reconstruction_collection* create_new_key_collection(const size_t key_collec
 
 void remove_key_from_collection(key_reconstruction_collection* key_collection, const esp_bd_addr_t consumer_mac_address, uint8_t key_id)
 {
-    if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
+    if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))
     {
         int key_index_in_collection = get_key_index_in_collection(key_collection, consumer_mac_address, key_id);
         if (key_index_in_collection >= 0)
@@ -56,9 +56,16 @@ void remove_key_from_collection(key_reconstruction_collection* key_collection, c
 bool reconstruct_key_from_key_fragments(key_reconstruction_collection* key_collection, key_128b* km, const esp_bd_addr_t consumer_mac_address, uint8_t key_id)
 {
     bool key_reconstruction_result = false;
+
+    if (key_collection == NULL || km == NULL || consumer_mac_address == NULL)
+    {
+        ESP_LOGE(KEY_MNGMT_GROUP, "NULL PTR reconstruct_key_from_key_fragments");
+        return key_reconstruction_result;
+    }
+
     if (is_key_available(key_collection, consumer_mac_address, key_id) == true)
     {   
-        if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
+        if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))
         {
             int key_index_in_collection = get_key_index_in_collection(key_collection, consumer_mac_address, key_id);
             get_128b_key_from_fragments(&(key_collection->km[key_index_in_collection].key), &(key_collection->km[key_index_in_collection].key_fragments));
@@ -77,7 +84,7 @@ bool reconstruct_key_from_key_fragments(key_reconstruction_collection* key_colle
 bool is_key_in_collection(key_reconstruction_collection* key_collection, const esp_bd_addr_t consumer_mac_address, uint8_t key_id)
 {
     bool result = false;
-    if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
+    if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))
     {
         result = get_key_index_in_collection(key_collection, consumer_mac_address, key_id) >= 0 ? true : false;
         xSemaphoreGive(key_collection->xMutex);
@@ -98,7 +105,7 @@ bool add_new_key_to_collection(key_reconstruction_collection* key_collection, es
         return result;
     }
 
-    if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
+    if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))
     {
         for (int i = 0; i < key_collection->key_management_size; i++)
         {
@@ -122,7 +129,7 @@ bool add_new_key_to_collection(key_reconstruction_collection* key_collection, es
 
 void add_fragment_to_key_management(key_reconstruction_collection* key_collection, const esp_bd_addr_t consumer_mac_address, uint8_t key_id, uint8_t *fragment, uint8_t key_fragment_id)
 {
-    if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
+    if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))
     {
         int key_index = get_key_index_in_collection(key_collection, consumer_mac_address, key_id);
         if (key_index >= 0)
@@ -142,7 +149,7 @@ void add_fragment_to_key_management(key_reconstruction_collection* key_collectio
 bool is_key_available(key_reconstruction_collection* key_collection, const esp_bd_addr_t consumer_mac_address, uint8_t key_id)
 {
     bool result = false;
-    if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
+    if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))
     {
         int index = get_key_index_in_collection(key_collection, consumer_mac_address, key_id);
         if (index >= 0 )
@@ -182,7 +189,7 @@ int get_key_index_in_collection(key_reconstruction_collection* key_collection, c
 bool is_key_fragment_decrypted(key_reconstruction_collection* key_collection, esp_bd_addr_t consumer_mac_address, uint8_t key_id, uint8_t key_fragment)
 {
     bool key_fragment_decrypted = false;
-    if (xSemaphoreTake(key_collection->xMutex, pdMS_TO_TICKS(100)))
+    if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))
     {
         int key_index_in_collection = get_key_index_in_collection(key_collection, consumer_mac_address, key_id);
         if (key_index_in_collection >= 0)

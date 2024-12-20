@@ -1,5 +1,6 @@
 #include "ble_consumer_collection.h"
 #include "ble_consumer.h"
+#include "ble_gap_payload_consuming.h"
 #include "beacon_pdu_data.h"
 #include "sec_pdu_processing.h"
 #include "key_reconstructor.h"
@@ -60,12 +61,13 @@ typedef struct {
     esp_bd_addr_t mac_address;
 } beacon_pdu_data_with_mac_addr;
 
-int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu);
-int process_deferred_queue(ble_consumer * p_ble_consumer);
-void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * output, uint8_t output_len);
-int init_sec_processing_resources();
-void handle_event_new_pdu();
-void handle_event_process_deferred_pdus();
+static int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu);
+static int process_deferred_queue(ble_consumer * p_ble_consumer);
+static void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * output, uint8_t output_len);
+static void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address);
+static int init_sec_processing_resources();
+static void handle_event_new_pdu();
+static void handle_event_process_deferred_pdus();
 
 void register_payload_notifier_cb(payload_decrypted_notifier_cb cb)
 {
@@ -82,13 +84,13 @@ void sec_processing_main(void *arg)
                                                  EVENT_NEW_PDU | EVENT_PROCESS_DEFFERRED_PDUS,
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
 
+        if (events & EVENT_NEW_PDU) {
+            handle_event_new_pdu();
+        }
+
         if (events & EVENT_PROCESS_DEFFERRED_PDUS)
         {
             handle_event_process_deferred_pdus();
-        }
-
-        if (events & EVENT_NEW_PDU) {
-            handle_event_new_pdu();
         }
 
     }
@@ -112,8 +114,21 @@ void handle_event_new_pdu()
         p_ble_consumer = get_ble_consumer_from_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
         if (p_ble_consumer == NULL && get_active_no_consumers(sec_pdu_st.consumer_collection) < MAX_BLE_CONSUMERS)
         {
-            add_consumer_to_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
-            p_ble_consumer = get_ble_consumer_from_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
+            p_ble_consumer = add_consumer_to_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
+            if (p_ble_consumer == NULL)
+            {
+                ESP_LOGE(SEC_PDU_PROC_LOG, "Failed adding new consumer to collection :(");
+            }
+            else
+            {
+                ESP_LOGI(SEC_PDU_PROC_LOG, "Successfully addded consumer to collection, count of active consumers: %i", get_active_no_consumers(sec_pdu_st.consumer_collection)); 
+            }
+        }
+
+        if (p_ble_consumer == NULL)
+        {
+            ESP_LOGE(SEC_PDU_PROC_LOG, "Failed acquairing ble consumer from collection :(");
+            continue;
         }
 
         key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].pdu.bcd.key_id);
@@ -129,35 +144,42 @@ void handle_event_new_pdu()
         }
         else
         {
-            if (sec_pdu_st.payload_notifier_cb != NULL)
-            {
-                uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
-                decrypt_pdu(key, &(pduBatch[i].pdu), output, MAX_PDU_PAYLOAD_SIZE);
-                sec_pdu_st.payload_notifier_cb(output, MAX_PDU_PAYLOAD_SIZE, pduBatch[i].mac_address);
-            }
+            decrypt_and_notify(key, &pduBatch[i].pdu, pduBatch[i].mac_address);
         }
             
     }
 }
 
-void handle_event_process_deferred_pdus()
-{
-    for (int i = 0; i < sec_pdu_st.ble_consumer_collection_size; i++)
-    {
-        ble_consumer * p_ble_consumer = &sec_pdu_st.consumer_collection->arr[i];
-        if (true == is_deferred_queue_request_pending(p_ble_consumer))
+// Handle deferred PDUs event
+static void handle_event_process_deferred_pdus() {
+    ESP_LOGI(SEC_PDU_PROC_LOG, "Processing deferred queue...");
+    for (size_t i = 0; i < sec_pdu_st.ble_consumer_collection_size; i++) {
+        ble_consumer *consumer = &(sec_pdu_st.consumer_collection->arr[i]);
+        if (consumer != NULL)
         {
-            bool request_pending = is_deferred_queue_request_pending(p_ble_consumer);
-            process_deferred_queue(p_ble_consumer);
-            if (true == is_pdu_in_deferred_queue(p_ble_consumer))
-            {
-                xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
-            }
-            else
-            {
-                set_deferred_q_pending_processing(&sec_pdu_st.consumer_collection->arr[i], false);
+            if (is_deferred_queue_request_pending(consumer)) {
+                process_deferred_queue(consumer);
+                if (!is_pdu_in_deferred_queue(consumer)) {
+                    set_deferred_q_pending_processing(consumer, false);
+                } else {
+                    xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
+                }
             }
         }
+        else
+        {
+            ESP_LOGI(SEC_PROCESSING_TASK_NAME, "BLE Consumer NULL PTR");
+        }
+    }
+}
+
+// Decrypt PDU and notify callback
+static void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address) {
+    uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
+    decrypt_pdu(key, pdu, output, sizeof(output));
+
+    if (sec_pdu_st.payload_notifier_cb) {
+        sec_pdu_st.payload_notifier_cb(output, sizeof(output), mac_address);
     }
 }
 
@@ -168,18 +190,20 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
     while (get_deferred_queue_item(p_ble_consumer, &pduBatch[counter]) == pdTRUE && MAX_PROCESSED_PDUS_AT_ONCE > counter) {
         counter++;
     }
-
+    
+    const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[0].bcd.key_id);
+    uint8_t last_key_id = pduBatch[0].bcd.key_id;
     for (int i = 0; i < counter; i++)
     {
-        const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].bcd.key_id);
+        if (last_key_id != pduBatch[i].bcd.key_id)
+        {
+            const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].bcd.key_id);
+            uint8_t last_key_id = pduBatch[i].bcd.key_id;
+        }
+
         if (key != NULL)
         {
-            if (sec_pdu_st.payload_notifier_cb != NULL)
-            {
-                uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
-                decrypt_pdu(key, &(pduBatch[i]), output, MAX_PDU_PAYLOAD_SIZE);
-                sec_pdu_st.payload_notifier_cb(output, MAX_PDU_PAYLOAD_SIZE, p_ble_consumer->mac_address_arr);
-            }
+            decrypt_and_notify(key, &(pduBatch[i]), p_ble_consumer->mac_address_arr);
         }
         else
         {   
@@ -221,28 +245,59 @@ int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data
 }
 
 int update_key_in_cache(ble_consumer* p_ble_consumer, uint8_t key_id, const key_128b* reconstructed_key) {
-    int status = add_key_to_cache(&(p_ble_consumer->context.key_cache), reconstructed_key, key_id);
-    if (status != 0) {
+    int status = add_key_to_cache(p_ble_consumer->context.key_cache, reconstructed_key, key_id);
+    if (status != -1) {
         p_ble_consumer->context.recently_removed_key_id = remove_lru_key_from_cache(&(p_ble_consumer->context.key_cache));
         status = add_key_to_cache(&(p_ble_consumer->context.key_cache), reconstructed_key, key_id);
+    }
+    else if (status != -3)
+    {
+        ESP_LOGE(SEC_PDU_PROC_LOG, "add_key_to_cache null ptr");
     }
     return status;
 }
 
 
-void key_reconstruction_complete(uint8_t key_id, const key_128b * const reconstructed_key, esp_bd_addr_t mac_address)
+void key_reconstruction_complete(uint8_t key_id, key_128b * const reconstructed_key, uint8_t *mac_address)
 {
+    // Retrieve BLE consumer associated with mac_address
     ble_consumer * p_ble_consumer = get_ble_consumer_from_collection(sec_pdu_st.consumer_collection, mac_address);
-    int status = update_key_in_cache(p_ble_consumer, key_id, reconstructed_key);
+    if (p_ble_consumer == NULL)
+    {
+        ESP_LOGE(SEC_PDU_PROC_LOG, "BLE Consumer NULL for MAC address: %02x:%02x:%02x:%02x:%02x:%02x",
+                 mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
+        return;
+    }
+
+    // Attempt to add the reconstructed key to the cache
+    int status = add_key_to_cache(p_ble_consumer->context.key_cache, reconstructed_key, key_id);
+    if (status == -1)
+    {
+        ESP_LOGE(SEC_PDU_PROC_LOG, "Removing key from cache");
+        // Cache full; remove LRU and retry
+        p_ble_consumer->context.recently_removed_key_id = remove_lru_key_from_cache(p_ble_consumer->context.key_cache);
+        ESP_LOGE(SEC_PDU_PROC_LOG, "Removed key id: %i", p_ble_consumer->context.recently_removed_key_id);
+        status = add_key_to_cache(p_ble_consumer->context.key_cache, reconstructed_key, key_id);
+        if (status != 0)
+        {
+            ESP_LOGE(SEC_PDU_PROC_LOG, "Error adding new key: %i", status);
+        }
+    }
+    
     if (status == 0)
     {
-        ESP_LOG_BUFFER_HEX("Key has been added to the cache for device:", (uint8_t * )mac_address, sizeof(esp_bd_addr_t));
+        // Key successfully added to cache
+        ESP_LOGI(SEC_PDU_PROC_LOG, "Key added to cache for device: %02x:%02x:%02x:%02x:%02x:%02x, Key ID: %d",
+                 mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5], key_id);
+
+        // Mark deferred queue for processing
         set_deferred_q_pending_processing(p_ble_consumer, true);
         xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
     }
     else
     {
-        ESP_LOGE(SEC_PDU_PROC_LOG, "Key has not been added to the cache!");
+        ESP_LOGE(SEC_PDU_PROC_LOG, "Failed to add key to cache for device: %02x:%02x:%02x:%02x:%02x:%02x, Key ID: %d, Status: %d",
+                 mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5], key_id, status);
     }
 }
 
@@ -323,6 +378,7 @@ int start_up_sec_processing()
             }
             else
             {
+                register_payload_notifier_cb(payload_notifier);
                 ESP_LOGI(SEC_PDU_PROC_LOG, "Task was created successfully! :)");
             }
         }
@@ -338,14 +394,17 @@ int process_sec_pdu(beacon_pdu_data* pdu, esp_bd_addr_t mac_address)
 
     if (sec_pdu_st.is_sec_pdu_processing_initialised == true)
     {   
-        if (pdu != NULL)
+        if (pdu != NULL && mac_address != NULL)
         {
             beacon_pdu_data_with_mac_addr temp_pdu;
-            memcpy(&(temp_pdu.pdu), pdu, sizeof(beacon_pdu_data));
-            memcpy(&(temp_pdu.mac_address), mac_address, sizeof(esp_bd_addr_t));
-            stats = xQueueSend(sec_pdu_st.processingQueue, ( void * ) pdu, QUEUE_TIMEOUT_SYS_TICKS);
+            temp_pdu.pdu = *pdu;
+            memcpy(temp_pdu.mac_address, mac_address, sizeof(esp_bd_addr_t));
+            stats = xQueueSend(sec_pdu_st.processingQueue, ( void * ) &temp_pdu, QUEUE_TIMEOUT_SYS_TICKS);
+            if (stats)
+            {
+                xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_NEW_PDU);
+            }
         }
-        xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_NEW_PDU);
     }
 
     return stats;

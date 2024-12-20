@@ -52,6 +52,7 @@ int create_ble_consumer_resources(ble_consumer *const p_ble_consumer, const uint
         return -1;
     }
 
+    p_ble_consumer->context.deferredQueue = NULL;
     p_ble_consumer->context.deferredQueue = xQueueCreate(DEFERRED_QUEUE_SIZE, sizeof(beacon_pdu_data));
     if (!p_ble_consumer->context.deferredQueue) {
         ESP_LOGE("BLE_CONSUMER", "Failed to create deferred queue");
@@ -60,6 +61,7 @@ int create_ble_consumer_resources(ble_consumer *const p_ble_consumer, const uint
         return -1;
     }
 
+    p_ble_consumer->xMutex = NULL;
     p_ble_consumer->xMutex = xSemaphoreCreateMutex();
     if (!p_ble_consumer->xMutex) {
         ESP_LOGE("BLE_CONSUMER", "Failed to create mutex");
@@ -138,7 +140,7 @@ int add_to_deferred_queue(ble_consumer *p_ble_consumer, beacon_pdu_data *pdu) {
         return -1;
     }
 
-    if (xQueueSend(p_ble_consumer->context.deferredQueue, (void *)pdu, portMAX_DELAY) == pdPASS) {
+    if (xQueueSend(p_ble_consumer->context.deferredQueue, (void *)pdu, 0) == pdTRUE) {
         xSemaphoreTake(p_ble_consumer->xMutex, portMAX_DELAY);
         p_ble_consumer->context.deferred_queue_count++;
         xSemaphoreGive(p_ble_consumer->xMutex);
@@ -154,16 +156,23 @@ bool get_deferred_queue_item(ble_consumer *p_ble_consumer, beacon_pdu_data *pdu)
         return false;
     }
 
-    if (xQueueReceive(p_ble_consumer->context.deferredQueue, (void *)pdu, portMAX_DELAY) == pdPASS) {
-        xSemaphoreTake(p_ble_consumer->xMutex, portMAX_DELAY);
-        if (p_ble_consumer->context.deferred_queue_count > 0) {
-            p_ble_consumer->context.deferred_queue_count--;
+    bool result = false;
+    if (xSemaphoreTake(p_ble_consumer->xMutex, portMAX_DELAY) == pdTRUE)
+    {
+        if (xQueueReceive(p_ble_consumer->context.deferredQueue, pdu, 0) == pdTRUE) {
+            if (p_ble_consumer->context.deferred_queue_count > 0) {
+                p_ble_consumer->context.deferred_queue_count--;
+            }
+            result = true;
         }
         xSemaphoreGive(p_ble_consumer->xMutex);
-        return true;
+    }
+    else
+    {
+        ESP_LOGI("BLE_CONSUMER", "Failed to acquire semaphore while getting from deferred queue");
     }
 
-    return false;
+    return result;
 }
 
 // Checks if there is a pending deferred queue processing request
@@ -171,10 +180,12 @@ bool is_deferred_queue_request_pending(ble_consumer *p_ble_consumer) {
     if (!p_ble_consumer) {
         return false;
     }
-
-    xSemaphoreTake(p_ble_consumer->xMutex, portMAX_DELAY);
-    bool is_pending = p_ble_consumer->context.process_deferred_q_request_pending;
-    xSemaphoreGive(p_ble_consumer->xMutex);
+    bool is_pending = false;
+    if (xSemaphoreTake(p_ble_consumer->xMutex, portMAX_DELAY) == pdTRUE)
+    {
+        is_pending = p_ble_consumer->context.process_deferred_q_request_pending;
+        xSemaphoreGive(p_ble_consumer->xMutex);
+    }
 
     return is_pending;
 }
@@ -200,20 +211,22 @@ bool is_pdu_in_deferred_queue(ble_consumer *p_ble_consumer)
 
 void set_deferred_q_pending_processing(ble_consumer* p_ble_consumer, const bool request)
 {
-    if (p_ble_consumer != NULL && p_ble_consumer->xMutex != NULL)
-    {
-        if (xSemaphoreTake(p_ble_consumer->xMutex, portMAX_DELAY) == pdTRUE)
-        {
+    if (!p_ble_consumer || !p_ble_consumer->xMutex) {
+        ESP_LOGE("BLE_CONSUMER", "Invalid BLE consumer or mutex not initialized.");
+        return;
+    }
+
+    if (xSemaphoreTake(p_ble_consumer->xMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    // Avoid redundant updates
+        if (p_ble_consumer->context.process_deferred_q_request_pending != request) {
             p_ble_consumer->context.process_deferred_q_request_pending = request;
-            xSemaphoreGive(p_ble_consumer->xMutex);
         }
-        else
-        {
-            ESP_LOGE("BLE_CONSUMER", "Failed to acquire mutex for setting deferred queue request.");
-        }
+        xSemaphoreGive(p_ble_consumer->xMutex);
     }
     else
     {
-        ESP_LOGE("BLE_CONSUMER", "Invalid BLE consumer or mutex not initialized.");
+        ESP_LOGE("BLE_CONSUMER", "Failed to acquire mutex after timeout.");
     }
 }
+
+

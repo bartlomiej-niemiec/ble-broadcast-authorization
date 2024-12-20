@@ -95,11 +95,14 @@ int clear_ble_consumer_from_collection(ble_consumer_collection * p_ble_consumer_
     return status;
 }
 
-int add_consumer_to_collection(ble_consumer_collection *p_collection, esp_bd_addr_t mac_address) {
-    if (p_collection == NULL || mac_address == NULL) return -1;
+ble_consumer * add_consumer_to_collection(ble_consumer_collection *p_collection, esp_bd_addr_t mac_address) {
+
+    ble_consumer * p_ble_consumer = NULL;
+
+    if (p_collection == NULL || mac_address == NULL) return p_ble_consumer;
 
     if (xSemaphoreTake(p_collection->xMutex, portMAX_DELAY) != pdTRUE) {
-        return -1;
+        return p_ble_consumer;
     }
 
     int index = get_first_free_index(p_collection);
@@ -108,12 +111,13 @@ int add_consumer_to_collection(ble_consumer_collection *p_collection, esp_bd_add
         memcpy(p_collection->arr[index].mac_address_arr, mac_address, sizeof(esp_bd_addr_t));
         save_timestamp(&p_collection->arr[index].last_pdu_timestamp, &p_collection->arr[index].rollover);
         p_collection->consumers_count++;
+        p_ble_consumer = &(p_collection->arr[index]);
     } else {
         ESP_LOGE("BLE_COLLECTION", "No space available for new consumer!");
     }
 
     xSemaphoreGive(p_collection->xMutex);
-    return (index >= 0) ? 0 : -1;
+    return p_ble_consumer;
 }
 
 ble_consumer * get_ble_consumer_from_collection(ble_consumer_collection * p_ble_consumer_collection, esp_bd_addr_t mac_address_arr)

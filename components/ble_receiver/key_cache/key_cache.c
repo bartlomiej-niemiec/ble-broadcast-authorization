@@ -100,7 +100,7 @@ int init_key_cache(key_reconstruction_cache * key_cache)
 
 int add_key_to_cache(key_reconstruction_cache * const key_cache, key_128b * key, uint8_t key_id)
 {
-    if (key_cache == NULL)
+    if (key_cache == NULL || key == NULL)
     {
         return -3;
     }
@@ -355,10 +355,10 @@ int remove_lru_key_from_cache(key_reconstruction_cache * const key_cache)
 
     if (lru_index >= 0)
     {
-        return remove_key_from_cache_at_index(key_cache, lru_index);
+        remove_key_from_cache_at_index(key_cache, lru_index);
     }
 
-    return -1; // No keys found
+    return lru_index; // No keys found
 }
 
 bool clear_cache(key_reconstruction_cache * const key_cache)
