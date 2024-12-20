@@ -220,10 +220,20 @@ int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data
     return stats;
 }
 
+int update_key_in_cache(ble_consumer* p_ble_consumer, uint8_t key_id, const key_128b* reconstructed_key) {
+    int status = add_key_to_cache(&(p_ble_consumer->context.key_cache), reconstructed_key, key_id);
+    if (status != 0) {
+        p_ble_consumer->context.recently_removed_key_id = remove_lru_key_from_cache(&(p_ble_consumer->context.key_cache));
+        status = add_key_to_cache(&(p_ble_consumer->context.key_cache), reconstructed_key, key_id);
+    }
+    return status;
+}
+
+
 void key_reconstruction_complete(uint8_t key_id, const key_128b * const reconstructed_key, esp_bd_addr_t mac_address)
 {
     ble_consumer * p_ble_consumer = get_ble_consumer_from_collection(sec_pdu_st.consumer_collection, mac_address);
-    int status = add_key_to_cache(&(p_ble_consumer->context.key_cache), reconstructed_key, key_id);
+    int status = update_key_in_cache(p_ble_consumer, key_id, reconstructed_key);
     if (status == 0)
     {
         ESP_LOG_BUFFER_HEX("Key has been added to the cache for device:", (uint8_t * )mac_address, sizeof(esp_bd_addr_t));
@@ -232,19 +242,7 @@ void key_reconstruction_complete(uint8_t key_id, const key_128b * const reconstr
     }
     else
     {
-        p_ble_consumer->context.recently_removed_key_id = remove_lru_key_from_cache(&(p_ble_consumer->context.key_cache));
-        status = add_key_to_cache(&(p_ble_consumer->context.key_cache), reconstructed_key, key_id);
-        if (status == 0)
-        {
-            ESP_LOGI(SEC_PDU_PROC_LOG, "Removed LRU key from cache!");
-            ESP_LOG_BUFFER_HEX("Key has been added to the cache for device:", (uint8_t * )mac_address, sizeof(esp_bd_addr_t));
-            set_deferred_q_pending_processing(p_ble_consumer, true);
-            xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_PROCESS_DEFFERRED_PDUS);
-        }
-        else
-        {
-            ESP_LOGE(SEC_PDU_PROC_LOG, "Key has not been added to the cache!");
-        }
+        ESP_LOGE(SEC_PDU_PROC_LOG, "Key has not been added to the cache!");
     }
 }
 
@@ -256,24 +254,27 @@ int init_sec_processing_resources()
     sec_pdu_st.processingQueue = xQueueCreate(MAX_PROCESSING_QUEUE_ELEMENTS, sizeof(beacon_pdu_data_with_mac_addr));
     if (sec_pdu_st.processingQueue == NULL)
     {
+        ESP_LOGE(SEC_PDU_PROC_LOG, "processing queue create failed!");
         status = -1;
         return status;
     }
 
     sec_pdu_st.eventGroup = xEventGroupCreate();
 
-    if (sec_pdu_st.processingQueue == NULL)
-    {
+    if (sec_pdu_st.eventGroup == NULL) {
+        status = -2;
+        vEventGroupDelete(sec_pdu_st.eventGroup);
         vQueueDelete(sec_pdu_st.processingQueue);
-        status = -3;
+        ESP_LOGE(SEC_PDU_PROC_LOG, "event group create failed!");
         return status;
     }
 
     sec_pdu_st.consumer_collection = create_ble_consumer_collection(sec_pdu_st.ble_consumer_collection_size, KEY_CACHE_SIZE);
     if (sec_pdu_st.consumer_collection == NULL)
     {
-        status = -4;
+        status = -3;
         vQueueDelete(sec_pdu_st.processingQueue);
+        vEventGroupDelete(sec_pdu_st.eventGroup);
         ESP_LOGE(SEC_PDU_PROC_LOG, "ble consumer collection create failed!");
     }
 
