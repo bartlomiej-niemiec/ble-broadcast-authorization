@@ -1,37 +1,11 @@
 #include "key_cache.h"
 #include "esp_log.h"
 #include "string.h"
+#include "tick_count_timestamp.h"
 #include "freertos/task.h"
 
 
 static const char *KEY_CACHE_LOG_GROUP = "KEY CACHE LOG";
-
-void save_tick_count_for_key_map(key_reconstruction_map * map)
-{
-    if (map != NULL)
-    {
-        uint32_t tickCount = xTaskGetTickCount();
-        if (tickCount < map->last_used_timestamp)
-        {
-            map->rollover++;
-        }
-        map->last_used_timestamp = tickCount;
-    }
-}
-
-uint64_t get_combined_timestamp(const key_reconstruction_map * map)
-{
-    return ((uint64_t)map->rollover << 32) | map->last_used_timestamp;
-}
-
-void reset_tick_count_for_map(key_reconstruction_map * map)
-{
-    if (map != NULL)
-    {
-        map->rollover = 0;
-        map->last_used_timestamp = 0;
-    }
-}
 
 int create_key_cache(key_reconstruction_cache ** key_cache, const uint8_t cache_size)
 {
@@ -109,7 +83,7 @@ int init_key_cache(key_reconstruction_cache * key_cache)
             for (int i = 0; i < key_cache->cache_size; i++)
             {
                 key_cache->map[i].key_id = 0;
-                reset_tick_count_for_map(&(key_cache->map[i]));
+                reset_timestamp(&(key_cache->map[i].last_used_timestamp), &(key_cache->map[i].rollover));
                 memset(&(key_cache->map[i].key), 0, sizeof(key_cache->map[i].key));
             }
             xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
@@ -159,7 +133,7 @@ int add_key_to_cache(key_reconstruction_cache * const key_cache, key_128b * key,
         }
         else
         {
-            save_tick_count_for_key_map(&(key_cache->map[first_free_index]));
+            save_timestamp(&(key_cache->map[first_free_index].last_used_timestamp), &(key_cache->map[first_free_index].rollover));
             key_cache->map[first_free_index].key_id = key_id;
             memcpy(&(key_cache->map[first_free_index].key), key, sizeof(key_cache->map[first_free_index].key));
             status = 0;
@@ -204,7 +178,7 @@ int remove_key_from_cache(key_reconstruction_cache * const key_cache, uint8_t ke
 
         if (key_index_in_map >= 0)
         {
-            reset_tick_count_for_map(&(key_cache->map[key_index_in_map]));
+            reset_timestamp(&(key_cache->map[key_index_in_map].last_used_timestamp), &(key_cache->map[key_index_in_map].rollover));
             key_cache->map[key_index_in_map].key_id = 0;
             memset(&(key_cache->map[key_index_in_map].key), 0, sizeof(key_cache->map[key_index_in_map].key));
 
@@ -242,7 +216,7 @@ const key_128b* get_key_from_cache(key_reconstruction_cache * const key_cache, u
         if (key_id == key_cache->last_key_id_used && key_cache->last_key_index_in_map >= 0)
         {
             key = &(key_cache->map[key_cache->last_key_index_in_map].key);
-            save_tick_count_for_key_map(&(key_cache->map[key_cache->last_key_index_in_map]));
+            save_timestamp(&(key_cache->map[key_cache->last_key_index_in_map].last_used_timestamp), &(key_cache->map[key_cache->last_key_index_in_map].rollover));
             xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
             return key;
         }
@@ -263,7 +237,7 @@ const key_128b* get_key_from_cache(key_reconstruction_cache * const key_cache, u
             key = &(key_cache->map[key_index_in_map].key);
             key_cache->last_key_id_used = key_id;
             key_cache->last_key_index_in_map = key_index_in_map;
-            save_tick_count_for_key_map(&(key_cache->map[key_index_in_map]));
+            save_timestamp(&(key_cache->map[key_index_in_map].last_used_timestamp), &(key_cache->map[key_index_in_map].rollover));
         }
 
         xSemaphoreGive(key_cache->xMutexCacheAccess); // Release the mutex
@@ -334,7 +308,7 @@ int remove_key_from_cache_at_index(key_reconstruction_cache * const key_cache, u
         else
         {
             uint8_t key_id = key_cache->map[index].key_id;
-            reset_tick_count_for_map(&(key_cache->map[index]));
+            reset_timestamp(&(key_cache->map[index].last_used_timestamp), &(key_cache->map[index].rollover));
             key_cache->map[index].key_id = 0;
             memset(&(key_cache->map[index].key), 0, sizeof(key_cache->map[index].key));
 
@@ -369,7 +343,7 @@ int remove_lru_key_from_cache(key_reconstruction_cache * const key_cache)
     {
         for (int i = 0; i < key_cache->cache_size; i++)
         {
-            uint64_t combined_timestamp = get_combined_timestamp(&(key_cache->map[i]));
+            uint64_t combined_timestamp = get_timestamp(&(key_cache->map[i].last_used_timestamp), &(key_cache->map[i].rollover));
             if (combined_timestamp < min_combined_timestamp && key_cache->map[i].key_id != 0)
             {
                 min_combined_timestamp = combined_timestamp;

@@ -60,12 +60,11 @@ typedef struct {
     esp_bd_addr_t mac_address;
 } beacon_pdu_data_with_mac_addr;
 
-int process_deferred_queue_new_key();
+int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu);
 int process_deferred_queue(ble_consumer * p_ble_consumer);
 void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * output, uint8_t output_len);
 int init_sec_processing_resources();
 void handle_event_new_pdu();
-void handle_event_key_reconstructed();
 void handle_event_process_deferred_pdus();
 
 void register_payload_notifier_cb(payload_decrypted_notifier_cb cb)
@@ -122,11 +121,11 @@ void handle_event_new_pdu()
             queue_key_for_reconstruction(pduBatch[i].pdu.bcd.key_id, pduBatch[i].pdu.bcd.key_fragment_no, 
                                         pduBatch[i].pdu.bcd.enc_key_fragment, pduBatch[i].pdu.bcd.key_fragment_hmac, 
                                         pduBatch[i].pdu.bcd.xor_seed, pduBatch[i].mac_address);
-            add_to_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
+            add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
         }
         else if (is_pdu_in_deferred_queue(p_ble_consumer) > 0)
         {
-            add_to_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
+            add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
         }
         else
         {
@@ -187,7 +186,7 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
             /// Drop PDU from removed key
             if (pduBatch[i].bcd.key_id != p_ble_consumer->context.recently_removed_key_id)
             {
-                add_to_deferred_queue(p_ble_consumer, &pduBatch[i]);
+                add_to_consumer_deferred_queue(p_ble_consumer, &pduBatch[i]);
             }
         }
     }
@@ -206,7 +205,7 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
 }
 
 
-int add_to_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu)
+int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu)
 {
     BaseType_t stats = pdFAIL;
     ESP_LOGI(SEC_PDU_PROC_LOG, "Adding data to deffered queue");

@@ -1,33 +1,6 @@
 #include "ble_consumer_collection.h"
+#include "tick_count_timestamp.h"
 #include <string.h>
-
-
-void save_tick_count_for_ble_consumer(ble_consumer * const  p_ble_consumer)
-{
-    if (p_ble_consumer != NULL)
-    {
-        uint32_t tickCount = xTaskGetTickCount();
-        if (tickCount < p_ble_consumer->last_pdu_timestamp)
-        {
-            p_ble_consumer->rollover++;
-        }
-        p_ble_consumer->last_pdu_timestamp = tickCount;
-    }
-}
-
-uint64_t get_combined_timestamp(ble_consumer * const  p_ble_consumer)
-{
-    return ((uint64_t)p_ble_consumer->last_pdu_timestamp << 32) | p_ble_consumer->rollover;
-}
-
-void reset_tick_count_for_map(ble_consumer * const  p_ble_consumer)
-{
-    if (p_ble_consumer != NULL)
-    {
-        p_ble_consumer->rollover = 0;
-        p_ble_consumer->last_pdu_timestamp = 0;
-    }
-}
 
 ble_consumer_collection * create_ble_consumer_collection(const uint8_t collection_size, const uint8_t sender_key_cache_size)
 {
@@ -144,7 +117,7 @@ int add_consumer_to_collection(ble_consumer_collection * p_ble_consumer_collecti
             {
                 reset_ble_consumer(&(p_ble_consumer_collection->arr[index]));
                 memcpy(&(p_ble_consumer_collection->arr[index].mac_address_arr), mac_address_arr, sizeof(esp_bd_addr_t));
-                save_tick_count_for_ble_consumer(&(p_ble_consumer_collection->arr[index]));
+                save_timestamp(&(p_ble_consumer_collection->arr[index].last_pdu_timestamp), &(p_ble_consumer_collection->arr[index].rollover));
                 p_ble_consumer_collection->consumers_count++;
             }
         
@@ -166,7 +139,7 @@ ble_consumer * get_ble_consumer_from_collection(ble_consumer_collection * p_ble_
             if (index >= 0)
             {
                 p_ble_consumer = &(p_ble_consumer_collection->arr[index]);
-                save_tick_count_for_ble_consumer(&(p_ble_consumer_collection->arr[index]));
+                save_timestamp(&(p_ble_consumer_collection->arr[index].last_pdu_timestamp), &(p_ble_consumer_collection->arr[index].rollover));
             }   
             xSemaphoreGive(p_ble_consumer_collection->xMutex);
         }
