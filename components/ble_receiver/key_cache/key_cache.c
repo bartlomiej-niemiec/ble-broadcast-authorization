@@ -66,6 +66,26 @@ int create_key_cache(key_reconstruction_cache ** key_cache, const uint8_t cache_
     return status;
 }
 
+int destroy_key_cache(key_reconstruction_cache * const key_cache)
+{
+    int status = 0;
+    if (key_cache == NULL)
+    {
+        status = -1;
+        return status;
+    }
+    else
+    {
+        vSemaphoreDelete(key_cache->xMutexCacheAccess);
+        for (int i = 0; i < key_cache->cache_size; i++)
+        {
+            free(&(key_cache->map[i]));
+        }
+        free(key_cache);
+    }
+    return status;
+}
+
 int init_key_cache(key_reconstruction_cache * key_cache)
 {
     int status = 0;
@@ -365,4 +385,18 @@ int remove_lru_key_from_cache(key_reconstruction_cache * const key_cache)
     }
 
     return -1; // No keys found
+}
+
+bool clear_cache(key_reconstruction_cache * const key_cache)
+{
+    bool cache_clear_done = false;
+    if (key_cache != NULL)
+    {
+        for (int i = 0; i < key_cache->cache_size; i++)
+        {
+            cache_clear_done = remove_key_from_cache_at_index(key_cache, i) == 0;
+        }
+    }
+
+    return cache_clear_done;
 }

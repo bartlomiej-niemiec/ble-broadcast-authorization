@@ -18,8 +18,6 @@
 
 #define QUEUE_TIMEOUT_MS 20
 
-#define KEY_COLLECTION_SIZE 4
-
 #define MAX_KEY_PROCESSES_AT_ONCE 10
 
 // Event group flags
@@ -31,6 +29,7 @@ typedef struct{
     uint8_t encrypted_key_fragment[KEY_FRAGMENT_SIZE];
     uint8_t key_hmac[HMAC_SIZE];
     uint8_t xor_seed;
+    esp_bd_addr_t consumer_mac_address;
 } __attribute__((aligned(4))) reconstructor_queue_element;
 
 static const char* RECONSTRUCTION_TASK_NAME = "KEY_RECONSTRUCTION_TASK";
@@ -55,7 +54,7 @@ static key_reconstructor_control st_reconstructor_control = {
 };
 
 void process_and_store_key_fragment(reconstructor_queue_element * q_element);
-bool init_reconstructor_resources();
+bool init_reconstructor_resources(const uint8_t key_reconstruction_collection_size);
 void handle_event_new_key_fragment_in_queue();
 
 void reconstructor_main(void *arg)
@@ -86,35 +85,35 @@ void handle_event_new_key_fragment_in_queue()
 
     for (int i = 0; i < counter; i++)
     {
-        if (is_key_in_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id) == false)
+        if (is_key_in_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id) == false)
         {
-            add_new_key_to_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id);
+            add_new_key_to_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             ESP_LOGI(REC_LOG_GROUP, "Adding new key to collection for reconstruction: %i", keyFragmentBatch[i].key_id);
         }
 
-        if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id, keyFragmentBatch[i].key_fragment_no) == false)
+        if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id, keyFragmentBatch[i].key_fragment_no) == false)
         {
             process_and_store_key_fragment(&keyFragmentBatch[i]);
         }
 
-        if (is_key_available(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id) == true)
+        if (is_key_available(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id) == true)
         {
             key_128b reconstructed_key = {0};
-            reconstruct_key_from_key_fragments(st_reconstructor_control.key_collection, &reconstructed_key, keyFragmentBatch[i].key_id);
+            reconstruct_key_from_key_fragments(st_reconstructor_control.key_collection, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             if (st_reconstructor_control.key_rec_cb != NULL)
             {
-                st_reconstructor_control.key_rec_cb(keyFragmentBatch[i].key_id, &reconstructed_key);
+                st_reconstructor_control.key_rec_cb(keyFragmentBatch[i].key_id, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address);
             }
-            remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].key_id);
+            remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
         }
     }
 }
 
 
-int start_up_key_reconstructor(void) {
+int start_up_key_reconstructor(const uint8_t max_key_reconstrunction_count) {
 
     int status = 0;
-    st_reconstructor_control.is_reconstructor_resources_init = init_reconstructor_resources();
+    st_reconstructor_control.is_reconstructor_resources_init = init_reconstructor_resources(max_key_reconstrunction_count);
 
     if (st_reconstructor_control.is_reconstructor_resources_init == true)
     {
@@ -156,7 +155,7 @@ void register_callback_to_key_reconstruction(key_reconstruction_complete_cb cb)
     st_reconstructor_control.key_rec_cb = cb;
 }
 
-bool init_reconstructor_resources()
+bool init_reconstructor_resources(const uint8_t key_reconstruction_collection_size)
 {
     st_reconstructor_control.eventGroup = xEventGroupCreate();
 
@@ -172,7 +171,7 @@ bool init_reconstructor_resources()
         return false;
     }
 
-    st_reconstructor_control.key_collection = create_new_key_collection(KEY_COLLECTION_SIZE);
+    st_reconstructor_control.key_collection = create_new_key_collection(key_reconstruction_collection_size);
 
     if (st_reconstructor_control.xQueueKeyReconstruction == NULL)
     {
@@ -183,12 +182,12 @@ bool init_reconstructor_resources()
 }
 
 
-RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uint8_t key_fragment_no, uint8_t * encrypted_key_fragment, uint8_t * key_hmac, uint8_t xor_seed)
+RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uint8_t key_fragment_no, uint8_t * encrypted_key_fragment, uint8_t * key_hmac, uint8_t xor_seed, const esp_bd_addr_t consumer_mac_address)
 {
     RECONSTRUCTION_QUEUEING_STATUS result = QUEUED_SUCCESS;
     if (st_reconstructor_control.is_reconstructor_resources_init == true)
     {
-        if (is_key_available(st_reconstructor_control.key_collection, key_id) == true)
+        if (is_key_available(st_reconstructor_control.key_collection, consumer_mac_address, key_id) == true)
         {
             ESP_LOGI(REC_LOG_GROUP, "Key ID %d already in cache, skipping queue.", key_id);
             return QUEUED_FAILED_KEY_ALREADY_RECONSTRUCTED; // Key already reconstructed       
@@ -200,7 +199,7 @@ RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uin
         }
         else
         {
-            if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, key_id, key_fragment_no) == false)
+            if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, consumer_mac_address, key_id, key_fragment_no) == false)
             {
                 reconstructor_queue_element q_in = {};
                 q_in.key_id = key_id;
@@ -209,6 +208,7 @@ RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uin
 
                 memcpy(q_in.encrypted_key_fragment, encrypted_key_fragment, KEY_FRAGMENT_SIZE);
                 memcpy(q_in.key_hmac, key_hmac, HMAC_SIZE);
+                memcpy(q_in.consumer_mac_address, consumer_mac_address, sizeof(esp_bd_addr_t));
 
                 int queue_result = xQueueSend(st_reconstructor_control.xQueueKeyReconstruction, (void *)&q_in, QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS);
                 
@@ -248,7 +248,7 @@ void process_and_store_key_fragment(reconstructor_queue_element * q_element)
 
     if (crypto_secure_memcmp(calculated_hmac_buffer, q_element->key_hmac, sizeof(calculated_hmac_buffer)) == 0)
     {
-        add_fragment_to_key_management(st_reconstructor_control.key_collection, q_element->key_id, decrypted_key_fragment_buffer, q_element->key_fragment_no);
+        add_fragment_to_key_management(st_reconstructor_control.key_collection, q_element->consumer_mac_address, q_element->key_id, decrypted_key_fragment_buffer, q_element->key_fragment_no);
         ESP_LOGI(REC_LOG_GROUP, "Successfully reconstructed key fragment no: %i", q_element->key_fragment_no);
     }
 }

@@ -46,6 +46,9 @@
         "functional": "cpp",
         "key_reconstructor.h": "c",
         "ble_receiver.h": "c",
-        "esp_random.h": "c"
+        "esp_random.h": "c",
+        "ble_consumer_collection.h": "c",
+        "variant": "c",
+        "map": "c"
     }
 }
