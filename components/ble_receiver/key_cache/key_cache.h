@@ -24,6 +24,8 @@ typedef struct {
 
 int create_key_cache(key_reconstruction_cache ** key_cache, const uint8_t cache_size);
 
+int destroy_key_cache(key_reconstruction_cache * const key_cache);
+
 int init_key_cache(key_reconstruction_cache * key_cache);
 
 int add_key_to_cache(key_reconstruction_cache * const key_cache, key_128b * key, uint8_t key_id);
@@ -33,6 +35,8 @@ int remove_key_from_cache(key_reconstruction_cache * const key_cache, uint8_t ke
 int remove_lru_key_from_cache(key_reconstruction_cache * const key_cache);
 
 bool is_key_in_cache(key_reconstruction_cache * const key_cache, uint8_t key_id);
+
+bool clear_cache(key_reconstruction_cache * const key_cache);
 
 const key_128b* get_key_from_cache(key_reconstruction_cache * const key_cache, uint8_t key_id);
 

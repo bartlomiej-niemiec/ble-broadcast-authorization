@@ -41,9 +41,9 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         case ESP_GAP_SEARCH_INQ_RES_EVT:
             {
                 ble_broadcast_pdu pdu = {0};
-                if (true == create_ble_broadcast_pdu_for_dispatcher(&pdu, scan_result->scan_rst.ble_adv, scan_result->scan_rst.adv_data_len))
+                if (true == create_ble_broadcast_pdu_for_dispatcher(&pdu, scan_result->scan_rst.ble_adv, scan_result->scan_rst.adv_data_len, scan_result->scan_rst.bda))
                 {
-                    dispatch_pdu(&pdu);
+                    dispatch_pdu(&pdu, scan_result->scan_rst.bda);
                 }
             }
             break;

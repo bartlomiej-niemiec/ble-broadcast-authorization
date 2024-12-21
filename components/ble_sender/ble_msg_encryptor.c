@@ -8,7 +8,7 @@
 #include "freertos/semphr.h"
 #include "esp_timer.h"
 
-#define KEY_REPLACEMENT_TIMEOUT_S 10
+#define KEY_REPLACEMENT_TIMEOUT_S 15
 #define KEY_REPLACEMENT_TIMEOUT_US (KEY_REPLACEMENT_TIMEOUT_S * (1000000))
 
 static const char* MSG_SENDER_LOG_GROUP = "MSG_ENCRYPTOR";

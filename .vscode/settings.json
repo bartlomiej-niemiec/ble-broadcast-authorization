@@ -46,6 +46,13 @@
         "functional": "cpp",
         "key_reconstructor.h": "c",
         "ble_receiver.h": "c",
-        "esp_random.h": "c"
+        "esp_random.h": "c",
+        "ble_consumer_collection.h": "c",
+        "variant": "c",
+        "map": "c",
+        "task.h": "c",
+        "ble_gap_payload_consuming.h": "c",
+        "sec_payload_observer_collection.h": "c",
+        "semphr.h": "c"
     }
 }
