@@ -44,6 +44,26 @@ ble_consumer_collection * create_ble_consumer_collection(const uint8_t collectio
     return p_collection;
 }
 
+void destroy_ble_consumer_collection(ble_consumer_collection * p_ble_consumer_collection)
+{
+    if (p_ble_consumer_collection != NULL)
+    {
+        if (p_ble_consumer_collection->xMutex)
+        {
+            vSemaphoreDelete(p_ble_consumer_collection->xMutex);
+        }
+
+        if (p_ble_consumer_collection->arr)
+        {
+            for (int i = p_ble_consumer_collection->size - 1; i >= 0; i--)
+            {
+                destroy_ble_consumer(&p_ble_consumer_collection->arr[i]);
+            }
+            free(p_ble_consumer_collection);
+        }
+    }
+}
+
 int get_first_free_index(ble_consumer_collection * p_ble_consumer_collection)
 {
     int index = -1;

@@ -186,7 +186,7 @@ int get_key_index_in_collection(key_reconstruction_collection* key_collection, c
     return index;
 }
 
-bool is_key_fragment_decrypted(key_reconstruction_collection* key_collection, esp_bd_addr_t consumer_mac_address, uint8_t key_id, uint8_t key_fragment)
+bool is_key_fragment_decrypted(key_reconstruction_collection* key_collection, const esp_bd_addr_t consumer_mac_address, uint8_t key_id, uint8_t key_fragment)
 {
     bool key_fragment_decrypted = false;
     if (xSemaphoreTake(key_collection->xMutex, portMAX_DELAY))

@@ -9,7 +9,7 @@
 //System
 #include <string.h>
 
-static const char* DIST_LOG_GROUP = "DISPATCHER TASK";
+static const char* DIST_LOG_GROUP = "PDU DISPATCHER";
 
 
 bool create_ble_broadcast_pdu_for_dispatcher(ble_broadcast_pdu* pdu, uint8_t *data, size_t size, esp_bd_addr_t mac_address)
@@ -36,7 +36,7 @@ void dispatch_pdu(ble_broadcast_pdu* pdu, esp_bd_addr_t mac_address)
 
         if (true == is_pdu_in_beacon_pdu_format(pdu_struct->data, pdu_struct->data_len))
         {
-            process_sec_pdu((beacon_pdu_data *) pdu_struct->data, mac_address);
+            enqueue_pdu_for_processing((beacon_pdu_data *) pdu_struct->data, mac_address);
         }
     }
 }

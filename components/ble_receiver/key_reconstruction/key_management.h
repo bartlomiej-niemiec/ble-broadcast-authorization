@@ -37,6 +37,6 @@ void add_fragment_to_key_management(key_reconstruction_collection* key_collectio
 
 bool is_key_available(key_reconstruction_collection* key_collection, const esp_bd_addr_t consumer_mac_address, uint8_t key_id);
 
-bool is_key_fragment_decrypted(key_reconstruction_collection* key_collection, esp_bd_addr_t consumer_mac_address, uint8_t key_id, uint8_t key_fragment);
+bool is_key_fragment_decrypted(key_reconstruction_collection* key_collection, const esp_bd_addr_t consumer_mac_address, uint8_t key_id, uint8_t key_fragment);
 
 #endif

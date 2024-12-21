@@ -1,7 +1,8 @@
 #include "ble_consumer_collection.h"
 #include "ble_consumer.h"
-#include "ble_gap_payload_consuming.h"
 #include "beacon_pdu_data.h"
+#include "sec_payload_observer_collection.h"
+#include "ble_gap_payload_consuming.h"
 #include "sec_pdu_processing.h"
 #include "key_reconstructor.h"
 #include "key_cache.h"
@@ -43,7 +44,7 @@ typedef struct {
     ble_consumer_collection* consumer_collection;
     size_t ble_consumer_collection_size;
     bool is_sec_pdu_processing_initialised;
-    payload_decrypted_notifier_cb payload_notifier_cb;
+    payload_decrypted_observer_collection * payload_decription_subcribers_collection;
 } sec_pdu_processing_control;
 
 static sec_pdu_processing_control sec_pdu_st = {
@@ -53,7 +54,7 @@ static sec_pdu_processing_control sec_pdu_st = {
     .consumer_collection = NULL,
     .ble_consumer_collection_size = MAX_BLE_CONSUMERS,
     .is_sec_pdu_processing_initialised = false,
-    .payload_notifier_cb = NULL
+    .payload_decription_subcribers_collection = NULL
 };
 
 typedef struct {
@@ -69,9 +70,12 @@ static int init_sec_processing_resources();
 static void handle_event_new_pdu();
 static void handle_event_process_deferred_pdus();
 
-void register_payload_notifier_cb(payload_decrypted_notifier_cb cb)
+void register_payload_observer_cb(payload_decrypted_observer_cb observer_cb)
 {
-    sec_pdu_st.payload_notifier_cb = cb;
+    if (sec_pdu_st.is_sec_pdu_processing_initialised)
+    {
+        add_observer_to_collection(sec_pdu_st.payload_decription_subcribers_collection, observer_cb);
+    }
 }
 
 void sec_processing_main(void *arg)
@@ -173,13 +177,21 @@ static void handle_event_process_deferred_pdus() {
     }
 }
 
+
 // Decrypt PDU and notify callback
-static void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address) {
+void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address) {
     uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
     decrypt_pdu(key, pdu, output, sizeof(output));
+    notify_pdo_collection_observers(sec_pdu_st.payload_decription_subcribers_collection, output, MAX_PDU_PAYLOAD_SIZE, mac_address);
+}
 
-    if (sec_pdu_st.payload_notifier_cb) {
-        sec_pdu_st.payload_notifier_cb(output, sizeof(output), mac_address);
+void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * output, uint8_t output_len)
+{
+    if (output_len == MAX_PDU_PAYLOAD_SIZE)
+    {
+        uint8_t nonce[NONCE_SIZE] = {0};
+        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_fragment_no, pdu->bcd.key_id, pdu->bcd.xor_seed);
+        aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload), key->key, nonce, output);
     }
 }
 
@@ -197,8 +209,8 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
     {
         if (last_key_id != pduBatch[i].bcd.key_id)
         {
-            const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].bcd.key_id);
-            uint8_t last_key_id = pduBatch[i].bcd.key_id;
+            key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].bcd.key_id);
+            last_key_id = pduBatch[i].bcd.key_id;
         }
 
         if (key != NULL)
@@ -216,16 +228,6 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
     }
 
     return counter;
-}
-
-void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * output, uint8_t output_len)
-{
-    if (output_len == MAX_PDU_PAYLOAD_SIZE)
-    {
-        uint8_t nonce[NONCE_SIZE] = {0};
-        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_fragment_no, pdu->bcd.key_id, pdu->bcd.xor_seed);
-        aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload), key->key, nonce, output);
-    }
 }
 
 
@@ -247,8 +249,8 @@ int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data
 int update_key_in_cache(ble_consumer* p_ble_consumer, uint8_t key_id, const key_128b* reconstructed_key) {
     int status = add_key_to_cache(p_ble_consumer->context.key_cache, reconstructed_key, key_id);
     if (status != -1) {
-        p_ble_consumer->context.recently_removed_key_id = remove_lru_key_from_cache(&(p_ble_consumer->context.key_cache));
-        status = add_key_to_cache(&(p_ble_consumer->context.key_cache), reconstructed_key, key_id);
+        p_ble_consumer->context.recently_removed_key_id = remove_lru_key_from_cache(p_ble_consumer->context.key_cache);
+        status = add_key_to_cache(p_ble_consumer->context.key_cache, reconstructed_key, key_id);
     }
     else if (status != -3)
     {
@@ -333,6 +335,16 @@ int init_sec_processing_resources()
         ESP_LOGE(SEC_PDU_PROC_LOG, "ble consumer collection create failed!");
     }
 
+    sec_pdu_st.payload_decription_subcribers_collection = create_pdo_collection(MAX_OBSERVERS);
+    if (sec_pdu_st.consumer_collection == NULL)
+    {
+        status = -4;
+        vQueueDelete(sec_pdu_st.processingQueue);
+        vEventGroupDelete(sec_pdu_st.eventGroup);
+        destroy_ble_consumer_collection(sec_pdu_st.consumer_collection);
+        ESP_LOGE(SEC_PDU_PROC_LOG, "ble consumer collection create failed!");
+    }
+
     return status;
 }
 
@@ -354,7 +366,6 @@ int start_up_sec_processing()
             register_callback_to_key_reconstruction(key_reconstruction_complete);
         }
     }
-
 
     if (status == 0)
     {
@@ -378,7 +389,7 @@ int start_up_sec_processing()
             }
             else
             {
-                register_payload_notifier_cb(payload_notifier);
+                register_payload_observer_cb(payload_notifier);
                 ESP_LOGI(SEC_PDU_PROC_LOG, "Task was created successfully! :)");
             }
         }
@@ -388,7 +399,7 @@ int start_up_sec_processing()
 }
 
 
-int process_sec_pdu(beacon_pdu_data* pdu, esp_bd_addr_t mac_address)
+int enqueue_pdu_for_processing(beacon_pdu_data* pdu, esp_bd_addr_t mac_address)
 {
     BaseType_t stats = pdFAIL;
 
