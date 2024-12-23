@@ -1,4 +1,4 @@
-idf_component_register(SRCS "ble_broadcast.c" "ble_sender_main.c"
+idf_component_register(SRCS "ble_broadcast.c" "main.c"
                     INCLUDE_DIRS "."
                     PRIV_REQUIRES core      
                     PRIV_REQUIRES esp_timer 
