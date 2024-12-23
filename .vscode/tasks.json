@@ -4,7 +4,7 @@
     {
       "label": "Build - Build project",
       "type": "shell",
-      "command": "${config:idf.pythonBinPath} ${config:idf.espIdfPath}/tools/idf.py build",
+      "command": "${config:idf.pythonBinPath} ${config:idf.espIdfPath}/tools/idf.py",
       "windows": {
         "command": "${config:idf.pythonBinPathWin} ${config:idf.espIdfPathWin}\\tools\\idf.py build",
         "options": {
@@ -39,8 +39,8 @@
         "kind": "build",
         "isDefault": true
       }
-    },
-    {
+  },
+  {
       "label": "Set ESP-IDF Target",
       "type": "shell",
       "command": "${command:espIdf.setTarget}",
