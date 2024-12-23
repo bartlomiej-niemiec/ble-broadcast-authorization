@@ -1,13 +1,16 @@
+#include "ble_security_payload_encryption.h"
+#include "crypto.h"
+
+#include "esp_log.h"
+#include "esp_random.h"
+#include "esp_timer.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 #include <string.h>
 #include <stdint.h>
 #include <limits.h>
-#include "esp_log.h"
-#include "ble_msg_encryptor.h"
-#include "esp_random.h"
-#include "crypto.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "esp_timer.h"
 
 #define KEY_REPLACEMENT_TIMEOUT_S 15
 #define KEY_REPLACEMENT_TIMEOUT_US (KEY_REPLACEMENT_TIMEOUT_S * (1000000))

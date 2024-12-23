@@ -9,7 +9,7 @@
     },
     "idf.espIdfPathWin": "C:\\esp-idf",
     "idf.openOcdConfigs": [
-        "board/esp32s3-builtin.cfg"
+        "board/esp32-wrover-kit-3.3v.cfg"
     ],
     "idf.portWin": "COM4",
     "idf.pythonBinPathWin": "C:\\esp-idf-tools\\python_env\\idf5.4_py3.11_env\\Scripts\\python.exe",
@@ -39,7 +39,6 @@
         "random": "c",
         "crypto.h": "c",
         "ranges": "c",
-        "ble_sender_msg_encryptor.h": "c",
         "ble_broadcast.h": "c",
         "ble_msg_encryptor.h": "c",
         "chrono": "cpp",
@@ -55,6 +54,8 @@
         "sec_payload_observer_collection.h": "c",
         "semphr.h": "c",
         "ble_sender.h": "c",
-        "esp_gap_ble_api.h": "c"
+        "esp_gap_ble_api.h": "c",
+        "esp_log.h": "c",
+        "ble_security_payload_encryption.h": "c"
     }
 }

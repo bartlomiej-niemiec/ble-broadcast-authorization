@@ -1,5 +1,5 @@
-#ifndef BLE_SENDER_MSG_ENCRYPTOR_H
-#define BLE_SENDER_MSG_ENCRYPTO_H
+#ifndef BLE_PDU_ENGINE_ENCRYPTOR_H
+#define BLE_PDU_ENGINE_ENCRYPTOR_H
 
 #include "beacon_pdu_data.h"
 #include "stddef.h"

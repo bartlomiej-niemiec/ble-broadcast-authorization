@@ -4,7 +4,6 @@ menu "Custom Project Options"
         string "Select the app to build"
         default "receiver_app"
         help
-            Enter the name of the app to build. Options: "receiver_app", "sender_app".
-    
+            Set the application target to build. Options: 'receiver_app', 'sender_app'.
+
 endmenu
-    

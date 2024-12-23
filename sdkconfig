@@ -402,6 +402,12 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# Custom Project Options
+#
+CONFIG_APP_TARGET="receiver_app"
+# end of Custom Project Options
+
+#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
