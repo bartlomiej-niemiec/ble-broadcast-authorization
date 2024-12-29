@@ -7,7 +7,8 @@
 #define KEY_FRAGMENT_SIZE 4
 #define NO_KEY_FRAGMENTS 4
 #define KEY_SIZE ((KEY_FRAGMENT_SIZE) * (NO_KEY_FRAGMENTS))
-#define HMAC_SIZE 4
+#define HMAC_SIZE 8
+#define NONCE_SIZE 4
 
 typedef struct {
     uint8_t  fragment[NO_KEY_FRAGMENTS][KEY_FRAGMENT_SIZE];
@@ -29,13 +30,15 @@ int aes_ctr_encrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t
 
 int aes_ctr_decrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t *nonce, uint8_t *output);
 
-void xor_encrypt_key_fragment(uint8_t  fragment[KEY_FRAGMENT_SIZE], uint8_t  encrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t xor_seed);
+int aes_ctr_encrypt_fragment(uint8_t *key_fragment, uint8_t *aes_key, uint8_t *aes_iv, uint8_t *encrypted_fragment);
 
-void xor_decrypt_key_fragment(uint8_t  encrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t  decrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t xor_seed);
+void derive_aes_ctr_key_iv(uint32_t time_interval, uint32_t session_id, uint8_t *nonce, uint8_t *aes_key, uint8_t *aes_iv);
 
 uint8_t get_random_seed();
 
-void calculate_hmac_of_fragment(uint8_t *key_fragment, uint8_t *encrypted_fragment, uint8_t *hmac_output);
+void fill_random_bytes(uint8_t *arr, size_t size_arr);
+
+void calculate_hmac_of_fragment(uint8_t *encrypted_fragment, uint8_t *marker, uint8_t pdu_type, uint8_t *session_data, uint8_t *nonce, uint8_t *hmac_output);
 
 int crypto_secure_memcmp(const void *a, const void *b, size_t size);
 

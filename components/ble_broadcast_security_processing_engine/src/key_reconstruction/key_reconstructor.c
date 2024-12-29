@@ -242,9 +242,9 @@ void process_and_store_key_fragment(reconstructor_queue_element * q_element)
     uint8_t decrypted_key_fragment_buffer[KEY_FRAGMENT_SIZE] = {0};
     uint8_t calculated_hmac_buffer[HMAC_SIZE] = {0};
 
-    xor_decrypt_key_fragment(q_element->encrypted_key_fragment, decrypted_key_fragment_buffer, q_element->xor_seed);
+    //xor_decrypt_key_fragment(q_element->encrypted_key_fragment, decrypted_key_fragment_buffer, q_element->xor_seed);
 
-    calculate_hmac_of_fragment(decrypted_key_fragment_buffer, q_element->encrypted_key_fragment, calculated_hmac_buffer);
+    //calculate_hmac_of_fragment(decrypted_key_fragment_buffer, q_element->encrypted_key_fragment, calculated_hmac_buffer);
 
     if (crypto_secure_memcmp(calculated_hmac_buffer, q_element->key_hmac, sizeof(calculated_hmac_buffer)) == 0)
     {

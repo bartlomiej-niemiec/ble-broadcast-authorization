@@ -151,11 +151,11 @@ void handle_event_new_pdu()
             continue;
         }
 
-        key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].pdu.bcd.key_id);
+        // key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].pdu.bcd.key_id);
         if (key == NULL ) {
-            queue_key_for_reconstruction(pduBatch[i].pdu.bcd.key_id, pduBatch[i].pdu.bcd.key_fragment_no, 
-                                        pduBatch[i].pdu.bcd.enc_key_fragment, pduBatch[i].pdu.bcd.key_fragment_hmac, 
-                                        pduBatch[i].pdu.bcd.xor_seed, pduBatch[i].mac_address);
+            // queue_key_for_reconstruction(pduBatch[i].pdu.bcd.key_id, pduBatch[i].pdu.bcd.key_fragment_no, 
+            //                             pduBatch[i].pdu.bcd.enc_key_fragment, pduBatch[i].pdu.bcd.key_fragment_hmac, 
+            //                             pduBatch[i].pdu.bcd.xor_seed, pduBatch[i].mac_address);
             add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
         }
         else if (is_pdu_in_deferred_queue(p_ble_consumer) > 0)
@@ -206,7 +206,7 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
     if (output_len == MAX_PDU_PAYLOAD_SIZE)
     {
         uint8_t nonce[NONCE_SIZE] = {0};
-        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_fragment_no, pdu->bcd.key_id, pdu->bcd.xor_seed);
+        // build_nonce(nonce, &(pdu->marker), pdu->bcd.key_fragment_no, pdu->bcd.key_id, pdu->bcd.xor_seed);
         aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload), key->key, nonce, output);
     }
 }
@@ -219,28 +219,28 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
         counter++;
     }
     
-    const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[0].bcd.key_id);
-    uint8_t last_key_id = pduBatch[0].bcd.key_id;
+    //const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[0].bcd.key_id);
+    //uint8_t last_key_id = pduBatch[0].bcd.key_id;
     for (int i = 0; i < counter; i++)
     {
-        if (last_key_id != pduBatch[i].bcd.key_id)
-        {
-            key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].bcd.key_id);
-            last_key_id = pduBatch[i].bcd.key_id;
-        }
+        // if (last_key_id != pduBatch[i].bcd.key_id)
+        // {
+        //     key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].bcd.key_id);
+        //     last_key_id = pduBatch[i].bcd.key_id;
+        // }
 
-        if (key != NULL)
-        {
-            decrypt_and_notify(key, &(pduBatch[i]), p_ble_consumer->mac_address_arr);
-        }
-        else
-        {   
-            /// Drop PDU from removed key
-            if (pduBatch[i].bcd.key_id != p_ble_consumer->context.recently_removed_key_id)
-            {
-                add_to_consumer_deferred_queue(p_ble_consumer, &pduBatch[i]);
-            }
-        }
+        // if (key != NULL)
+        // {
+        //     decrypt_and_notify(key, &(pduBatch[i]), p_ble_consumer->mac_address_arr);
+        // }
+        // else
+        // {   
+        //     /// Drop PDU from removed key
+        //     if (pduBatch[i].bcd.key_id != p_ble_consumer->context.recently_removed_key_id)
+        //     {
+        //         add_to_consumer_deferred_queue(p_ble_consumer, &pduBatch[i]);
+        //     }
+        // }
     }
 
     return counter;

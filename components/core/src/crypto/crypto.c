@@ -45,6 +45,7 @@ void add_fragment_to_key_spliited(key_splitted * key_splitted, uint8_t *fragment
     memcpy(key_splitted->fragment[fragment_index], fragment, KEY_FRAGMENT_SIZE);
 }
 
+
 int aes_ctr_encrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t *nonce, uint8_t *output) {
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
@@ -71,18 +72,25 @@ int aes_ctr_decrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t
     return aes_ctr_encrypt_payload(input, length, key, nonce, output);
 }
 
-void xor_encrypt_key_fragment(uint8_t fragment[KEY_FRAGMENT_SIZE], uint8_t encrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t xor_seed) {
-    encrypted_fragment[0] = fragment[0] ^ xor_seed;
-    for (int i = 1; i < KEY_FRAGMENT_SIZE; i++) {
-        encrypted_fragment[i] = fragment[i] ^ encrypted_fragment[i - 1];
-    }
-}
+int aes_ctr_encrypt_fragment(uint8_t *key_fragment, uint8_t *aes_key, uint8_t *aes_iv, uint8_t *encrypted_fragment) {
+    mbedtls_aes_context aes;
+    mbedtls_aes_init(&aes);
 
-void xor_decrypt_key_fragment(uint8_t encrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t decrypted_fragment[KEY_FRAGMENT_SIZE], uint8_t xor_seed) {
-    decrypted_fragment[0] = encrypted_fragment[0] ^ xor_seed;
-    for (int i = 1; i < KEY_FRAGMENT_SIZE; i++) {
-        decrypted_fragment[i] = encrypted_fragment[i] ^ encrypted_fragment[i - 1];
+    if (mbedtls_aes_setkey_enc(&aes, aes_key, 128) != 0) {
+        mbedtls_aes_free(&aes);
+        return -1; // Error
     }
+
+    size_t nc_off = 0;
+    uint8_t stream_block[16] = {0};
+
+    if (mbedtls_aes_crypt_ctr(&aes, 4, &nc_off, aes_iv, stream_block, key_fragment, encrypted_fragment) != 0) {
+        mbedtls_aes_free(&aes);
+        return -2; // Error
+    }
+
+    mbedtls_aes_free(&aes);
+    return 0; // Success
 }
 
 
@@ -91,6 +99,12 @@ uint8_t get_random_seed()
     uint8_t seed;
     esp_fill_random(&seed, sizeof(seed));
     return seed;
+}
+
+void fill_random_bytes(uint8_t *arr, size_t size_arr)
+{
+    // Generate random nonce
+    esp_fill_random(arr, size_arr);
 }
 
 void calculate_hmac(const uint8_t *key, size_t key_len, const uint8_t *message, size_t message_len, uint8_t *output)
@@ -143,9 +157,28 @@ void calculate_hmac(const uint8_t *key, size_t key_len, const uint8_t *message, 
     mbedtls_md_free(&ctx);
 }
 
-void calculate_hmac_of_fragment(uint8_t *key_fragment, uint8_t *encrypted_fragment, uint8_t *hmac_output) {
-    // Calculate HMAC of the encrypted fragment using the decrypted key fragment as the key
-    calculate_hmac(key_fragment, KEY_FRAGMENT_SIZE, encrypted_fragment, KEY_FRAGMENT_SIZE, hmac_output);
+void calculate_hmac_of_fragment(uint8_t *encrypted_fragment, uint8_t *marker, uint8_t pdu_type, uint8_t *session_data, uint8_t *nonce, uint8_t *hmac_output)
+{
+    uint8_t data[23]; // Marker (6) + PDU Type (1) + Encrypted Fragment (4) + Session Data (4) + Nonce (4)
+    memcpy(&data[0], marker, 6);
+    data[6] = pdu_type;
+    memcpy(&data[7], encrypted_fragment, 4);
+    memcpy(&data[11], session_data, 4);
+    memcpy(&data[15], nonce, 4);
+
+    // Calculate HMAC
+    calculate_hmac(NULL, 0, data, sizeof(data), hmac_output);
+}
+
+void derive_aes_ctr_key_iv(uint32_t time_interval, uint32_t session_id, uint8_t *nonce, uint8_t *aes_key, uint8_t *aes_iv) {
+    uint8_t data[12]; // time_interval (4) + session_id (4) + nonce (4)
+    memcpy(&data[0], &time_interval, 4);
+    memcpy(&data[4], &session_id, 4);
+    memcpy(&data[8], nonce, 4);
+
+    // Derive AES key and IV using HMAC
+    calculate_hmac(NULL, 0, data, sizeof(data), aes_key); // Generate 16-byte key
+    memcpy(aes_iv, aes_key + 8, 8);                       // Use part of the HMAC as IV
 }
 
 // Constant-time memory comparison
