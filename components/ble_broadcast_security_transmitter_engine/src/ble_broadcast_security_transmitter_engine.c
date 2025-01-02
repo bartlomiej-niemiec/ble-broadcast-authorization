@@ -3,13 +3,14 @@
 #include <string.h>
 
 #include "ble_broadcast_security_transmitter_engine.h"
-#include "ble_broadcast_security_encryptor.h"
 #include "ble_broadcast_controller.h"
 #include "beacon_pdu_data.h"
 #include "beacon_pdu_key_reconstruction.h"
 #include "beacon_pdu_helpers.h"
 #include "crypto.h"
 #include "ble_common.h"
+
+#include <stdatomic.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -44,42 +45,41 @@ typedef struct {
     const char timer_name[30];
 } key_fragment_schedule_timer;
 
-static key_encryption_parameters transmitter_key_encryption_pars;
-
 typedef struct {
-    bool key_fragment_ready_to_send;
-    beacon_key_pdu bpd;
-} key_fragment_structure;
-
-static key_fragment_structure key_fragment_st = {
-    .key_fragment_ready_to_send = false
-};
+    uint8_t key_fragment;
+    uint32_t last_pdu_timestamp;
+    beacon_key_data key_data;
+    beacon_key_pdu encrypted_key_pdu;
+} key_encryption_parameters;
 
 typedef struct {
     QueueHandle_t xQueuePayloadPdu;
     TaskHandle_t xTaskHandle;
     key_fragment_schedule_timer key_fragment_schedule_st;
     SemaphoreHandle_t xBroadcastPayloadMutex;
-    TransmitterState state;
+    atomic_int   transmitterState;
+    key_encryption_parameters transmitter_key_encryption_pars;
     key_128b key;
     key_splitted key_fragments;    
     uint32_t session_id; 
-    SemaphoreHandle_t xMutex;
     queue_payload_pdu last_payload_pdu; //use it when there is no new payload and no stop command
     queue_payload_pdu queue_add_helper;
 } sec_pdu_transmitter_control;
 
 static sec_pdu_transmitter_control transmitter_control_st = 
 {
-    .state = TRANSMITTER_NOT_INITIALIZED,
-    .key_fragment_schedule_st.timer_name = "SCHEDULE TIMER"
+    .key_fragment_schedule_st.timer_name = "SCHEDULE TIMER",
+    .transmitterState = TRANSMITTER_NOT_INITIALIZED
 };
-
-
 
 void transmitter_main_loop();
 void key_generation_state();
 bool encrypt_payload_data(uint8_t *payload, size_t size, beacon_pdu_data *pdu);
+void start_up_key_fragment_sending();
+void increment_next_key_fragment_index();
+uint32_t get_abs_timestamp_ms();
+void save_last_pdu_timestamp();
+void encrypt_nexy_key_fragment(uint32_t time_interval_ms);
 
 uint32_t get_random_time_interval()
 {
@@ -88,39 +88,22 @@ uint32_t get_random_time_interval()
     return time_interval_ms;
 }
 
-void key_fragment_ready(beacon_key_pdu * bkpdu)
-{
-    ESP_LOGI(TRANSMITTER_TASK_LOG, "Key fragment has been encrypted!");
-    memcpy(&key_fragment_st.bpd, bkpdu, sizeof(beacon_key_pdu));
-    key_fragment_st.key_fragment_ready_to_send = true;
-}
-
 void key_fragment_send_timer(void *args)
 {
-    if (key_fragment_st.key_fragment_ready_to_send == true)
-    {
         if(xSemaphoreTake(transmitter_control_st.xBroadcastPayloadMutex, 0) == pdTRUE)
         {
+            const int64_t DELAY_TIME = TIME_INTERVAL_RESOLUTION_MS * 2;
+            const int64_t CURR_TIMESTAMP = get_abs_timestamp_ms();
             ESP_LOGI(TRANSMITTER_TASK_LOG, "Key fragment PDU set!");
-            set_broadcasting_payload(&key_fragment_st.bpd, sizeof(key_fragment_st.bpd));
-            uint32_t time_interval = get_random_time_interval();
-            ESP_LOGI(TRANSMITTER_TASK_LOG, "Request for next key fragment after %lu", time_interval);
-            transmitter_key_encryption_pars.last_time_interval_ms += transmitter_key_encryption_pars.time_interval_ms;
-            transmitter_key_encryption_pars.time_interval_ms = time_interval;
-            transmitter_key_encryption_pars.key_fragment_index++;
-            if (transmitter_key_encryption_pars.key_fragment_index == 4)
-            {
-                transmitter_key_encryption_pars.key_fragment_index = 0;
-            }
-            key_fragment_st.key_fragment_ready_to_send = false;
-            request_key_fragment_pdu_encryption(&transmitter_key_encryption_pars);
-            esp_timer_start_once(transmitter_control_st.key_fragment_schedule_st.timer, time_interval * 1000);
-            vTaskDelay(pdMS_TO_TICKS(TIME_INTERVAL_RESOLUTION_MS));
+            set_broadcasting_payload(&transmitter_control_st.transmitter_key_encryption_pars.encrypted_key_pdu, sizeof(transmitter_control_st.transmitter_key_encryption_pars.encrypted_key_pdu));
+            uint32_t time_interval_ms = get_random_time_interval();
+            encrypt_nexy_key_fragment(time_interval_ms);
+            ESP_LOGI(TRANSMITTER_TASK_LOG, "Request for next key fragment after %lu", time_interval_ms);
+            esp_timer_start_once(transmitter_control_st.key_fragment_schedule_st.timer, time_interval_ms * 1000);
+            vTaskDelay(pdMS_TO_TICKS(DELAY_TIME - (get_abs_timestamp_ms() - CURR_TIMESTAMP)));
             set_broadcasting_payload(&transmitter_control_st.last_payload_pdu.data, transmitter_control_st.last_payload_pdu.size);
             xSemaphoreGive(transmitter_control_st.xBroadcastPayloadMutex);
         }
-        
-    }
 }
 
 bool is_pdu_in_queue()
@@ -131,37 +114,19 @@ bool is_pdu_in_queue()
 
 TransmitterState get_transmitter_state()
 {
-    TransmitterState currState = TRANSMITTER_NOT_INITIALIZED;
-    if (transmitter_control_st.xMutex != NULL)
-    {
-        if (xSemaphoreTake(transmitter_control_st.xMutex, pdMS_TO_TICKS(TRANSMITTER_SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
-        {
-            currState = transmitter_control_st.state;
-            xSemaphoreGive(transmitter_control_st.xMutex);
-        }
-    }
-    return currState;
+    return atomic_load(&transmitter_control_st.transmitterState);
 }
 
 bool set_transmitter_state(TransmitterState desired_state)
 {
-    bool status = false;
-    if (transmitter_control_st.xMutex != NULL)
-    {
-        if (xSemaphoreTake(transmitter_control_st.xMutex, pdMS_TO_TICKS(TRANSMITTER_SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
-        {
-            ESP_LOGI(TRANSMITTER_TASK_LOG, "State transition: %d -> %d", transmitter_control_st.state, desired_state);
-            transmitter_control_st.state = desired_state;
-            status = true;
-            xSemaphoreGive(transmitter_control_st.xMutex);
-        }
-    }
-    return status;
+    ESP_LOGI(TRANSMITTER_TASK_LOG, "State transition: %d -> %d", get_transmitter_state(), desired_state);
+    atomic_store(&transmitter_control_st.transmitterState, desired_state);
+    return true;
 }
 
 bool init_payload_transmitter()
 {
-    if (transmitter_control_st.state == TRANSMITTER_NOT_INITIALIZED)
+    if (get_transmitter_state() == TRANSMITTER_NOT_INITIALIZED)
     {
         transmitter_control_st.xQueuePayloadPdu = xQueueCreate(TRANSMITTER_QUEUE_SIZE, sizeof(queue_payload_pdu));
         if (transmitter_control_st.xQueuePayloadPdu == NULL)
@@ -170,16 +135,8 @@ bool init_payload_transmitter()
             return false;
         }
 
-        transmitter_control_st.xMutex = xSemaphoreCreateMutex();
-        if (transmitter_control_st.xMutex == NULL)
-        {
-            ESP_LOGE(TRANSMITTER_TASK_LOG, "Failed to create Mutex");
-            vQueueDelete(transmitter_control_st.xQueuePayloadPdu);
-            return false;
-        }
-
         transmitter_control_st.xBroadcastPayloadMutex = xSemaphoreCreateMutex();
-        if (transmitter_control_st.xMutex == NULL)
+        if (transmitter_control_st.xBroadcastPayloadMutex == NULL)
         {
             ESP_LOGE(TRANSMITTER_TASK_LOG, "Failed to create Mutex");
             vQueueDelete(transmitter_control_st.xQueuePayloadPdu);
@@ -201,21 +158,10 @@ bool init_payload_transmitter()
         }
 
         ble_init();
-        init_broadcast_controller();
-        const uint32_t WAIT_MS = 50;
-        vTaskDelay(pdMS_TO_TICKS(WAIT_MS));
-        if (get_broadcast_state() == BROADCAST_CONTROLLER_NOT_INITIALIZED)
+        bool status = init_broadcast_controller();
+        if (status == false)
         {
             ESP_LOGE(TRANSMITTER_TASK_LOG, "Failed to initialized broadcast controller");
-            vQueueDelete(transmitter_control_st.xQueuePayloadPdu);
-            return false;
-        }
-
-        bool result = init_and_start_up_encryptor_task();
-        register_fragment_encrypted_callback(key_fragment_ready);
-        if (result == false)
-        {
-            ESP_LOGE(TRANSMITTER_TASK_LOG, "Failed to create encryptor task");
             vQueueDelete(transmitter_control_st.xQueuePayloadPdu);
             return false;
         }
@@ -240,7 +186,7 @@ bool init_payload_transmitter()
     }
 
 
-    if (transmitter_control_st.state == TRANSMITTER_INITIALIZED_STOPPED)
+    if (get_transmitter_state() == TRANSMITTER_INITIALIZED_STOPPED)
     {
         BaseType_t  taskCreateResult = xTaskCreatePinnedToCore(
                     (TaskFunction_t) transmitter_main_loop,
@@ -273,12 +219,11 @@ void transmitter_main_loop()
 
     uint32_t TASK_DELAY_TICKS = pdMS_TO_TICKS(TRANSMITTER_TASK_DELAY_MS);
     beacon_pdu_data payload_pdu;
-    beacon_key_pdu key_pdu;
     queue_payload_pdu queue_pdu;
     bool firstPDU = true;
     while (1)
     {
-        switch (transmitter_control_st.state)
+        switch (get_transmitter_state())
         {
             case TRANSMITTER_WAIT_FOR_STARTUP:
             {
@@ -308,12 +253,7 @@ void transmitter_main_loop()
                                 if (firstPDU == true)
                                 {
                                     start_broadcasting();
-                                    int64_t current_time = esp_timer_get_time() / 1000;
-                                    uint32_t time_interval = get_random_time_interval();
-                                    transmitter_key_encryption_pars.last_time_interval_ms = current_time;
-                                    transmitter_key_encryption_pars.time_interval_ms = time_interval;
-                                    request_key_fragment_pdu_encryption(&transmitter_key_encryption_pars);
-                                    esp_timer_start_once(transmitter_control_st.key_fragment_schedule_st.timer, time_interval * 1000);
+                                    start_up_key_fragment_sending();
                                     firstPDU = false;
                                 }
 
@@ -354,9 +294,8 @@ void key_generation_state()
     split_128b_key_to_fragment(&transmitter_control_st.key, &transmitter_control_st.key_fragments);
     transmitter_control_st.session_id = esp_random();
 
-    memcpy(&transmitter_key_encryption_pars.key_fragments, &transmitter_control_st.key_fragments, sizeof(transmitter_control_st.key_fragments));
-    transmitter_key_encryption_pars.session_id = transmitter_control_st.session_id;
-    transmitter_key_encryption_pars.key_fragment_index = 0;
+    transmitter_control_st.transmitter_key_encryption_pars.key_data.session_data = transmitter_control_st.session_id;
+    transmitter_control_st.transmitter_key_encryption_pars.key_fragment = 0;
 }
 
 bool startup_payload_transmitter_engine()
@@ -394,7 +333,8 @@ int set_transmission_payload(uint8_t * payload, size_t payload_size)
 
     int status = -2;
 
-    if (transmitter_control_st.state != TRANSMITTER_NOT_INITIALIZED && transmitter_control_st.state != TRANSMITTER_INITIALIZED_STOPPED)
+    TransmitterState state = get_transmitter_state();
+    if ( state != TRANSMITTER_NOT_INITIALIZED && state != TRANSMITTER_INITIALIZED_STOPPED)
     {
         memcpy(transmitter_control_st.queue_add_helper.data, payload, payload_size);
         transmitter_control_st.queue_add_helper.size = payload_size;
@@ -414,12 +354,15 @@ bool encrypt_payload_data(uint8_t *payload, size_t size, beacon_pdu_data *pdu) {
     // Generate random nonce
     fill_random_bytes(nonce, sizeof(nonce));
 
-    aes_ctr_encrypt_payload(payload,
-            size,
-            transmitter_control_st.key.key,
-            nonce,
-            encrypt_payload_arr
-            );
+
+    encrypt_payload(
+        transmitter_control_st.key.key,
+        payload,
+        size,
+        (uint8_t *)&transmitter_control_st.session_id,
+        nonce,
+        encrypt_payload_arr
+        );
 
     build_beacon_pdu_data(encrypt_payload_arr,
             size,
@@ -430,4 +373,62 @@ bool encrypt_payload_data(uint8_t *payload, size_t size, beacon_pdu_data *pdu) {
     );
 
     return true;
+}
+
+uint32_t get_abs_timestamp_ms()
+{
+    return (uint32_t) (esp_timer_get_time() / 1000);
+}
+
+void increment_next_key_fragment_index()
+{
+    transmitter_control_st.transmitter_key_encryption_pars.key_fragment++;
+    if (transmitter_control_st.transmitter_key_encryption_pars.key_fragment == 4)
+    {
+        transmitter_control_st.transmitter_key_encryption_pars.key_fragment = 0;
+    }
+}
+
+void save_last_pdu_timestamp()
+{
+    transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp = transmitter_control_st.transmitter_key_encryption_pars.encrypted_key_pdu.key_data.timestamp;
+}
+
+void start_up_key_fragment_sending()
+{
+    transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp = 0;
+    transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp = get_abs_timestamp_ms();
+    uint32_t time_interval_ms = get_random_time_interval();
+    transmitter_control_st.transmitter_key_encryption_pars.key_data.next_packet_arrival_ms = time_interval_ms;
+    esp_timer_start_once(transmitter_control_st.key_fragment_schedule_st.timer, time_interval_ms * 1000);
+    encrypt_key_fragment(
+        transmitter_control_st.key_fragments.fragment[transmitter_control_st.transmitter_key_encryption_pars.key_fragment],
+        KEY_FRAGMENT_SIZE,
+        transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.session_data,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.enc_key_fragment,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.key_fragment_hmac
+    );
+    build_beacon_pdu_key(&transmitter_control_st.transmitter_key_encryption_pars.key_data, &transmitter_control_st.transmitter_key_encryption_pars.encrypted_key_pdu);
+    save_last_pdu_timestamp();
+    increment_next_key_fragment_index();
+}
+
+void encrypt_nexy_key_fragment(uint32_t time_interval_ms)
+{
+    transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp = get_abs_timestamp_ms();
+    transmitter_control_st.transmitter_key_encryption_pars.key_data.next_packet_arrival_ms = time_interval_ms;
+    encrypt_key_fragment(
+        transmitter_control_st.key_fragments.fragment[transmitter_control_st.transmitter_key_encryption_pars.key_fragment],
+        KEY_FRAGMENT_SIZE,
+        transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.session_data,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.enc_key_fragment,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.key_fragment_hmac
+    );
+    build_beacon_pdu_key(&transmitter_control_st.transmitter_key_encryption_pars.key_data, &transmitter_control_st.transmitter_key_encryption_pars.encrypted_key_pdu);
+    save_last_pdu_timestamp();
+    increment_next_key_fragment_index();
 }

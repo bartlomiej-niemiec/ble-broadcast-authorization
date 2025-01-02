@@ -9,9 +9,10 @@
 
 typedef struct {            
     uint32_t session_data;                          // unique ID for Symmetric Key and session key fragment
-    uint8_t nonce[NONCE_SIZE];
-    uint8_t enc_key_fragment[KEY_FRAGMENT_SIZE];    // encrypted key fragment                          // random seed for key fragment xor encryption
+    uint8_t enc_key_fragment[KEY_FRAGMENT_SIZE];    // encrypted key fragment
     uint8_t key_fragment_hmac[HMAC_SIZE];           // hmac of key fragment
+    uint32_t timestamp;
+    uint16_t next_packet_arrival_ms;
 } __attribute__((packed)) beacon_key_data;
 
 #define PDU_KEY_DATA_SIZE sizeof(beacon_key_data)

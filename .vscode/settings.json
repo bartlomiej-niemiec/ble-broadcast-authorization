@@ -64,6 +64,8 @@
         "beacon_key_data.h": "c",
         "ble_broadcast_controller.h": "c",
         "ble_broadcast_security_key_transmitter_engine.h": "c",
-        "set": "c"
+        "set": "c",
+        "stddef.h": "c",
+        "esp_crc.h": "c"
     }
 }

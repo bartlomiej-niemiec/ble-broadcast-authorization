@@ -1,6 +1,8 @@
 #include "ble_consumer_collection.h"
 #include "ble_consumer.h"
 #include "beacon_pdu_data.h"
+#include "beacon_pdu_key_reconstruction.h"
+#include "beacon_pdu_helpers.h"
 #include "sec_payload_observer_collection.h"
 #include "sec_pdu_processing.h"
 #include "key_reconstructor.h"
@@ -57,9 +59,19 @@ static sec_pdu_processing_control sec_pdu_st = {
 };
 
 typedef struct {
-    beacon_pdu_data pdu;
+    uint8_t payload[MAX_GAP_DATA_LEN];
+    uint8_t payload_size;
     esp_bd_addr_t mac_address;
+    int64_t timestamp_us;
 } beacon_pdu_data_with_mac_addr;
+
+
+//TEMP - DEBUGGING
+volatile uint32_t prev_key_data_timestamp = 0;
+volatile uint16_t prev_next_packet_arrival_ms = 0;
+volatile int64_t prev_key_data_hw_timestamp = 0;
+volatile bool is_first_key_data_pdu = true;
+
 
 static int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu);
 static int process_deferred_queue(ble_consumer * p_ble_consumer);
@@ -131,41 +143,77 @@ void handle_event_new_pdu()
 
     for (int i = 0; i < batchCount; i++)
     {
-        p_ble_consumer = get_ble_consumer_from_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
-        if (p_ble_consumer == NULL && get_active_no_consumers(sec_pdu_st.consumer_collection) < MAX_BLE_CONSUMERS)
+
+        if (pduBatch[i].payload_size == sizeof(beacon_key_pdu) && pduBatch[i].payload[sizeof(beacon_marker)] == PDU_KEY_RECONSTRUCTION)
         {
-            p_ble_consumer = add_consumer_to_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
-            if (p_ble_consumer == NULL)
+            beacon_key_pdu * temp_key_pdu = (beacon_key_pdu *) pduBatch[i].payload;
+            ESP_LOGI(SEC_PDU_PROC_LOG, "Received Key PDU");
+            ESP_LOG_BUFFER_HEX(SEC_PDU_PROC_LOG, pduBatch[i].payload, pduBatch[i].payload_size);  
+            if (is_first_key_data_pdu == true)
             {
-                ESP_LOGE(SEC_PDU_PROC_LOG, "Failed adding new consumer to collection :(");
+                ESP_LOGI(SEC_PDU_PROC_LOG, "Timestamp in PDU: %lu", temp_key_pdu->key_data.timestamp);
+                ESP_LOGI(SEC_PDU_PROC_LOG, "Next packet should arrive in: %u", temp_key_pdu->key_data.next_packet_arrival_ms);
+                prev_key_data_timestamp = temp_key_pdu->key_data.timestamp;
+                prev_next_packet_arrival_ms = temp_key_pdu->key_data.next_packet_arrival_ms;
+                prev_key_data_hw_timestamp = pduBatch[i].timestamp_us;
+                is_first_key_data_pdu = false;
             }
             else
             {
-                ESP_LOGI(SEC_PDU_PROC_LOG, "Successfully addded consumer to collection, count of active consumers: %i", get_active_no_consumers(sec_pdu_st.consumer_collection)); 
+                uint32_t timestamp_diff_arrival = temp_key_pdu->key_data.timestamp - (prev_key_data_timestamp + prev_next_packet_arrival_ms);
+                int64_t timestamp_hw_diff = (pduBatch[i].timestamp_us - prev_key_data_hw_timestamp) / 1000;
+                ESP_LOGI(SEC_PDU_PROC_LOG, "Timestamp in PDU: %lu", temp_key_pdu->key_data.timestamp);
+                ESP_LOGI(SEC_PDU_PROC_LOG, "Next packet should arrive in: %u", temp_key_pdu->key_data.next_packet_arrival_ms);
+                ESP_LOGI(SEC_PDU_PROC_LOG, "Timestamp diff in arrival (should be 0) last PDU: %lu, Timestamp diff in HW: %llu", timestamp_diff_arrival, timestamp_hw_diff);
+                prev_key_data_timestamp = temp_key_pdu->key_data.timestamp;
+                prev_next_packet_arrival_ms = temp_key_pdu->key_data.next_packet_arrival_ms;
+                prev_key_data_hw_timestamp = pduBatch[i].timestamp_us;
             }
         }
-
-        if (p_ble_consumer == NULL)
+        else if (pduBatch[i].payload_size == sizeof(beacon_pdu_data) && pduBatch[i].payload[sizeof(beacon_marker)] == PDU_PAYLOAD)
         {
-            ESP_LOGE(SEC_PDU_PROC_LOG, "Failed acquairing ble consumer from collection :(");
-            continue;
-        }
-
-        // key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].pdu.bcd.key_id);
-        if (key == NULL ) {
-            // queue_key_for_reconstruction(pduBatch[i].pdu.bcd.key_id, pduBatch[i].pdu.bcd.key_fragment_no, 
-            //                             pduBatch[i].pdu.bcd.enc_key_fragment, pduBatch[i].pdu.bcd.key_fragment_hmac, 
-            //                             pduBatch[i].pdu.bcd.xor_seed, pduBatch[i].mac_address);
-            add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
-        }
-        else if (is_pdu_in_deferred_queue(p_ble_consumer) > 0)
-        {
-            add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
+            ESP_LOGI(SEC_PDU_PROC_LOG, "Received Payload PDU");
         }
         else
         {
-            decrypt_and_notify(key, &pduBatch[i].pdu, pduBatch[i].mac_address);
+            ESP_LOGI(SEC_PDU_PROC_LOG, "Uknown PDU received");
         }
+
+        // p_ble_consumer = get_ble_consumer_from_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
+        // if (p_ble_consumer == NULL && get_active_no_consumers(sec_pdu_st.consumer_collection) < MAX_BLE_CONSUMERS)
+        // {
+        //     p_ble_consumer = add_consumer_to_collection(sec_pdu_st.consumer_collection, pduBatch[i].mac_address);
+        //     if (p_ble_consumer == NULL)
+        //     {
+        //         ESP_LOGE(SEC_PDU_PROC_LOG, "Failed adding new consumer to collection :(");
+        //     }
+        //     else
+        //     {
+        //         ESP_LOGI(SEC_PDU_PROC_LOG, "Successfully addded consumer to collection, count of active consumers: %i", get_active_no_consumers(sec_pdu_st.consumer_collection)); 
+        //     }
+        // }
+
+        // if (p_ble_consumer == NULL)
+        // {
+        //     ESP_LOGE(SEC_PDU_PROC_LOG, "Failed acquairing ble consumer from collection :(");
+        //     continue;
+        // }
+
+        // key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].pdu.bcd.key_id);
+        //if (key == NULL ) {
+            // queue_key_for_reconstruction(pduBatch[i].pdu.bcd.key_id, pduBatch[i].pdu.bcd.key_fragment_no, 
+            //                             pduBatch[i].pdu.bcd.enc_key_fragment, pduBatch[i].pdu.bcd.key_fragment_hmac, 
+            //                             pduBatch[i].pdu.bcd.xor_seed, pduBatch[i].mac_address);
+        //     add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
+        // }
+        // else if (is_pdu_in_deferred_queue(p_ble_consumer) > 0)
+        // {
+        //     add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
+        // }
+        // else
+        // {
+        //     decrypt_and_notify(key, &pduBatch[i].pdu, pduBatch[i].mac_address);
+        // }
             
     }
 }
@@ -197,7 +245,7 @@ static void handle_event_process_deferred_pdus() {
 // Decrypt PDU and notify callback
 void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address) {
     uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
-    decrypt_pdu(key, pdu, output, sizeof(output));
+    //decrypt_pdu(key, pdu, output, sizeof(output));
     notify_pdo_collection_observers(sec_pdu_st.payload_decription_subcribers_collection, output, MAX_PDU_PAYLOAD_SIZE, mac_address);
 }
 
@@ -207,7 +255,7 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
     {
         uint8_t nonce[NONCE_SIZE] = {0};
         // build_nonce(nonce, &(pdu->marker), pdu->bcd.key_fragment_no, pdu->bcd.key_id, pdu->bcd.xor_seed);
-        aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload), key->key, nonce, output);
+        //aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload), key->key, nonce, output);
     }
 }
 
@@ -414,22 +462,21 @@ int start_up_sec_processing()
 }
 
 
-int enqueue_pdu_for_processing(beacon_pdu_data* pdu, esp_bd_addr_t mac_address)
+int enqueue_pdu_for_processing(int64_t timestamp_us, uint8_t *data, size_t data_size, esp_bd_addr_t mac_address)
 {
     BaseType_t stats = pdFAIL;
 
     if (sec_pdu_st.is_sec_pdu_processing_initialised == true)
     {   
-        if (pdu != NULL && mac_address != NULL)
+        beacon_pdu_data_with_mac_addr temp_pdu;
+        memcpy(temp_pdu.mac_address, mac_address, sizeof(esp_bd_addr_t));
+        memcpy(temp_pdu.payload, data, data_size);
+        temp_pdu.timestamp_us = timestamp_us;
+        temp_pdu.payload_size = data_size;
+        stats = xQueueSend(sec_pdu_st.processingQueue, ( void * ) &temp_pdu, QUEUE_TIMEOUT_SYS_TICKS);
+        if (stats)
         {
-            beacon_pdu_data_with_mac_addr temp_pdu;
-            temp_pdu.pdu = *pdu;
-            memcpy(temp_pdu.mac_address, mac_address, sizeof(esp_bd_addr_t));
-            stats = xQueueSend(sec_pdu_st.processingQueue, ( void * ) &temp_pdu, QUEUE_TIMEOUT_SYS_TICKS);
-            if (stats)
-            {
-                xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_NEW_PDU);
-            }
+            xEventGroupSetBits(sec_pdu_st.eventGroup, EVENT_NEW_PDU);
         }
     }
 

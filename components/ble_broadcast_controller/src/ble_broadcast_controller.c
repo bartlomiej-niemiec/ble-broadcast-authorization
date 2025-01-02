@@ -5,13 +5,14 @@
 #include "esp_gap_ble_api.h"
 #include "esp_timer.h"
 #include "esp_random.h"
+#include <stdatomic.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include <string.h>
 
-#define MAX_ELEMENTS_IN_QUEUE 10
+#define EVENT_QUEUE_SIZE 30
 #define MINUS_INTERVAL_TOLERANCE_MS 10
 #define PLUS_INTERVAL_TOLERANCE_MS 10
 
@@ -39,76 +40,64 @@ static esp_ble_adv_params_t default_ble_adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
     };
 
-#define EVENT_QUEUE_SIZE 10
-
 typedef struct {
     esp_gap_ble_cb_event_t event_type;
-    uint8_t payload[MAX_PDU_PAYLOAD_SIZE];
+    int64_t timestamp;
+    esp_bd_addr_t mac_addr;
+    uint8_t payload[MAX_GAP_DATA_LEN];
     size_t payload_size;
 } BroadcastEvent;
 
-static QueueHandle_t eventQueue = NULL;
-
-
 typedef struct {
     QueueHandle_t eventQueue;
-    BroadcastState broadcastState;
+    atomic_int   broadcastState;
+    atomic_int   scannerState;
     TaskHandle_t xBroadcastTaskHandle;
     esp_ble_adv_params_t ble_adv_params;
     broadcast_state_changed_callback state_change_cb;
     broadcast_new_data_set_cb data_set_cb;
+    scan_complete scan_complete_cb;
     SemaphoreHandle_t xMutex;
-}
-broadcast_control_structure;
+} broadcast_control_structure;
 
 
 static broadcast_control_structure bc = 
 {
-    .broadcastState = BROADCAST_CONTROLLER_NOT_INITIALIZED
+    .broadcastState = BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING,
+    .scannerState = SCANNER_CONTROLLER_SCANNING_NOT_ACTIVE,
+    .state_change_cb = NULL,
+    .data_set_cb = NULL,
+    .scan_complete_cb = NULL
 };
+
+void set_broadcast_state(BroadcastState state);
+void set_scanner_state(ScannerState state);
 
 
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    BroadcastEvent evt = {0};
-    evt.event_type = event;
-
-    // Handle specific event types
-    switch (event) {
-        case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
-            ESP_LOGI(BROADCAST_LOG_GROUP, "New PDU set!");
-            break;
-
-        case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
-            if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
-                ESP_LOGE(BROADCAST_LOG_GROUP, "Adv start failed: %s", esp_err_to_name(param->adv_start_cmpl.status));
+    // Prepare event structure
+    BroadcastEvent evt = { .event_type = event, .payload_size = 0, .payload = {0}, .timestamp = 0 };    
+    // // Handle specific event types
+    if (event == ESP_GAP_BLE_SCAN_RESULT_EVT) {
+        esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
+        if (scan_result->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
+            evt.timestamp = esp_timer_get_time();
+            // Safely handle payload size
+            if (scan_result->scan_rst.adv_data_len <= MAX_GAP_DATA_LEN) {
+                evt.payload_size = scan_result->scan_rst.adv_data_len;
+                memcpy(evt.mac_addr, scan_result->scan_rst.bda, sizeof(esp_bd_addr_t));
+                memcpy(evt.payload, scan_result->scan_rst.ble_adv, evt.payload_size);
             } else {
-                ESP_LOGI(BROADCAST_LOG_GROUP, "Adv started!");
+                ESP_LOGW(BROADCAST_LOG_GROUP, "Adv data too large: %d bytes", scan_result->scan_rst.adv_data_len);
             }
-            break;
-
-        case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
-            if (param->adv_stop_cmpl.status != ESP_BT_STATUS_SUCCESS) {
-                ESP_LOGE(BROADCAST_LOG_GROUP, "Adv stop failed: %s", esp_err_to_name(param->adv_stop_cmpl.status));
-            }
-            break;
-
-        default:
-            break;
+        }
     }
 
-    // Enqueue event for deferred handling
-    if (xQueueSendFromISR(eventQueue, &evt, &xHigherPriorityTaskWoken) != pdPASS) {
-        ESP_LOGE(BROADCAST_LOG_GROUP, "Event queue full!");
-    }
-
-    if (xHigherPriorityTaskWoken == pdTRUE) {
-        portYIELD_FROM_ISR();
+    // Attempt to send event to task queue
+    if (xQueueSend(bc.eventQueue, &evt, pdMS_TO_TICKS(QUEUE_TIMEOUT_MS)) != pdPASS) {
+        ESP_LOGW(BROADCAST_LOG_GROUP, "Event queue full! Dropping event type: %d", event);
     }
 }
-
-
-
 
 static void ble_appRegister(void)
 {
@@ -128,7 +117,6 @@ static void ble_appRegister(void)
 static esp_err_t init_resources()
 {
     bc.ble_adv_params = default_ble_adv_params;
-    bc.broadcastState = BROADCAST_CONTROLLER_NOT_INITIALIZED;
 
     if (bc.xMutex == NULL) {
         bc.xMutex = xSemaphoreCreateMutex();
@@ -138,15 +126,16 @@ static esp_err_t init_resources()
         }
     }
 
-    if (eventQueue == NULL) {
-        eventQueue = xQueueCreate(EVENT_QUEUE_SIZE, sizeof(BroadcastEvent));
-        if (eventQueue == NULL) {
+    if (bc.eventQueue == NULL) {
+        bc.eventQueue = xQueueCreate(EVENT_QUEUE_SIZE, sizeof(BroadcastEvent));
+        if (bc.eventQueue == NULL) {
             ESP_LOGE(BROADCAST_LOG_GROUP, "Failed to create event queue!");
-            return false;
+            return ESP_ERR_NO_MEM;
         }
     }
 
-    bc.broadcastState = BROADCAST_CONTROLLER_INITIALIZED;
+    ESP_LOGE(BROADCAST_LOG_GROUP, "Initialization succed!");
+
     return ESP_OK;
 }
 
@@ -154,10 +143,9 @@ static esp_err_t init_resources()
 static void ble_sender_main(void) {
     BroadcastEvent evt;
 
-    ble_appRegister();
-
     while (1) {
-        if (xQueueReceive(eventQueue, &evt, portMAX_DELAY) == pdTRUE) {
+        // Receive events with a timeout for periodic maintenance
+        if (xQueueReceive(bc.eventQueue, &evt, pdMS_TO_TICKS(500)) == pdTRUE) {
             switch (evt.event_type) {
                 case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
                     if (bc.data_set_cb) {
@@ -166,21 +154,41 @@ static void ble_sender_main(void) {
                     break;
 
                 case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
+                    set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
                     if (bc.state_change_cb) {
                         bc.state_change_cb(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
                     }
                     break;
 
+
                 case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
+                    set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING);
                     if (bc.state_change_cb) {
-                        bc.state_change_cb(BROADCAST_CONTROLLER_BROADCASTING_FORCED_STOP);
+                        bc.state_change_cb(BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING);
+                    }
+                    break;
+
+                case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
+                    set_scanner_state(SCANNER_CONTROLLER_SCANNING_ACTIVE);
+                    break;
+
+                case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
+                    set_scanner_state(SCANNER_CONTROLLER_SCANNING_NOT_ACTIVE);
+                    break;
+
+                case ESP_GAP_BLE_SCAN_RESULT_EVT:
+                    if (bc.scan_complete_cb) {
+                        bc.scan_complete_cb(evt.timestamp, evt.payload, evt.payload_size, evt.mac_addr);
                     }
                     break;
 
                 default:
-                    ESP_LOGW(BROADCAST_LOG_GROUP, "Unhandled event type: %d", evt.event_type);
+                    ESP_LOGD(BROADCAST_LOG_GROUP, "Unhandled event type: %d", evt.event_type);
                     break;
             }
+        } else {
+            // Perform periodic maintenance here
+            ESP_LOGI(BROADCAST_LOG_GROUP, "Task is alive, monitoring...");
         }
     }
 }
@@ -198,7 +206,7 @@ bool init_broadcasting()
     return ble_controller_initialized;
 }
 
-void init_broadcast_controller()
+bool init_broadcast_controller()
 {
     
     bool status = init_broadcasting();
@@ -207,6 +215,7 @@ void init_broadcast_controller()
     {
         if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
         {
+            ble_appRegister();
             if (bc.xBroadcastTaskHandle == NULL)
             {
                 BaseType_t  taskCreateResult = xTaskCreatePinnedToCore(
@@ -223,6 +232,7 @@ void init_broadcast_controller()
                 {
                     bc.xBroadcastTaskHandle = NULL;
                     ESP_LOGE(BROADCAST_LOG_GROUP, "Task was not created successfully! :(");
+                    return false;
                 }
                 else
                 {
@@ -238,18 +248,10 @@ void init_broadcast_controller()
             xSemaphoreGive(bc.xMutex);
         }
     }
+
+    return true;
 }
 
-BroadcastState get_broadcast_state()
-{
-    BroadcastState state = BROADCAST_CONTROLLER_NOT_INITIALIZED;
-    if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
-    {
-        state = bc.broadcastState;
-        xSemaphoreGive(bc.xMutex);
-    }
-    return state;
-}
 void register_broadcast_state_change_callback(broadcast_state_changed_callback cb)
 {
     if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
@@ -264,6 +266,15 @@ void register_broadcast_new_data_callback(broadcast_new_data_set_cb cb)
     if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
     {
         bc.data_set_cb = cb;
+        xSemaphoreGive(bc.xMutex);
+    }
+}
+
+void register_scan_complete_callback(scan_complete cb)
+{
+    if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
+    {
+        bc.scan_complete_cb = cb;
         xSemaphoreGive(bc.xMutex);
     }
 }
@@ -299,20 +310,60 @@ void set_broadcast_time_interval(uint32_t time_interval_ms)
     }
 }
 
-void start_broadcasting()
+void stop_broadcasting()
 {
-    if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
+    if (get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_RUNNING)
     {
-        esp_ble_gap_start_advertising(&default_ble_adv_params);
-        xSemaphoreGive(bc.xMutex);
+        esp_ble_gap_stop_advertising();
     }
 }
 
-void stop_broadcasting()
-{
-    if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
-    {
-        esp_ble_gap_stop_advertising();
-        xSemaphoreGive(bc.xMutex);
+void start_broadcasting() {
+    if (get_scanner_state() == SCANNER_CONTROLLER_SCANNING_ACTIVE) {
+        stop_scanning(); // Ensure no overlap
     }
+    if (get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING) {
+        esp_ble_gap_start_advertising(&default_ble_adv_params);
+        set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
+    }
+}
+
+void start_scanning(esp_ble_scan_params_t scan_params, uint32_t scan_duration_s) {
+    if (get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_RUNNING) {
+        stop_broadcasting(); // Ensure no overlap
+    }
+    if (get_scanner_state() == SCANNER_CONTROLLER_SCANNING_NOT_ACTIVE) {
+        esp_ble_gap_set_scan_params(&scan_params);
+        esp_ble_gap_start_scanning(scan_duration_s);
+        set_scanner_state(SCANNER_CONTROLLER_SCANNING_ACTIVE);
+    }
+}
+
+
+void stop_scanning()
+{
+    if (get_scanner_state() == SCANNER_CONTROLLER_SCANNING_ACTIVE)
+    {
+        esp_ble_gap_stop_scanning();
+    }
+}
+
+BroadcastState get_broadcast_state()
+{
+    return atomic_load(&bc.broadcastState);
+}
+
+ScannerState get_scanner_state()
+{
+    return atomic_load(&bc.scannerState);
+}
+
+void set_broadcast_state(BroadcastState state)
+{
+    atomic_store(&bc.broadcastState, state);
+}
+
+void set_scanner_state(ScannerState state)
+{
+    atomic_store(&bc.scannerState, state);
 }

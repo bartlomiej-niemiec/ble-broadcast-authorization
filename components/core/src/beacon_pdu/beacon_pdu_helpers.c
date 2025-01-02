@@ -7,7 +7,7 @@
 static const char* BEACON_PDU_GROUP = "BEACON_PDU_GROUP";
 
 beacon_marker my_marker = {
-    .marker = {0xFF, 0x8, 0x0, 0xFF, 0x35, 0x01}
+    .marker = {0xFF, 0x8, 0x0, 0xFF}
 };
 
 beacon_pdu_data keep_alive_pdu = {0};
@@ -40,7 +40,7 @@ esp_err_t build_beacon_pdu_key (beacon_key_data* key_data, beacon_key_pdu *bpd)
 
     memcpy(&(bpd->marker), &my_marker, sizeof(beacon_marker));
     memcpy(&(bpd->type), &type, sizeof(bpd->type));
-    memcpy(&(bpd->key_data), bpd, sizeof(beacon_key_pdu));
+    memcpy(&(bpd->key_data), key_data, sizeof(beacon_key_data));
 
     return ESP_OK;
 }

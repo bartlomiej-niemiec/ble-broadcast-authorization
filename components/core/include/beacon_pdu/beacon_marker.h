@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define MARKER_SIZE 6
+#define MARKER_SIZE 4
 
 typedef struct {
     uint8_t marker[MARKER_SIZE];             // unique ID of PDU
