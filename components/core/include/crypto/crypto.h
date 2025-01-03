@@ -40,20 +40,20 @@ bool decrypt_payload(const uint8_t *key, const uint8_t *encrypted_payload, size_
                      const uint8_t *session_id, const uint8_t *nonce, 
                      uint8_t *decrypted_payload);
 
-bool decrypt_key_fragment(const uint8_t *encrypted_fragment, size_t fragment_size, 
-                          uint32_t prev_timestamp, uint32_t current_timestamp, 
-                          uint32_t session_data, const uint8_t *hmac_received, 
-                          uint8_t *decrypted_fragment);
+bool decrypt_key_fragment(const uint8_t *encrypted_fragment, uint32_t prev_timestamp, uint32_t curr_timestamp, uint8_t *decrypted_fragment);
 
-void encrypt_key_fragment(const uint8_t *key_fragment, size_t fragment_size, 
-                          uint32_t prev_timestamp, uint32_t current_timestamp, 
-                          uint32_t session_data, uint8_t *encrypted_fragment, uint8_t *hmac);
+bool encrypt_key_fragment(const uint8_t *fragment, uint32_t prev_timestamp, uint32_t curr_timestamp, uint8_t *encrypted_fragment);
 
 uint8_t get_random_seed();
 
 void fill_random_bytes(uint8_t *arr, size_t size_arr);
 
-void calculate_hmac_of_fragment(uint8_t *encrypted_fragment, uint8_t *marker, uint8_t pdu_type, uint8_t *session_data, uint8_t *nonce, uint8_t *hmac_output);
+bool calculate_hmac_with_decrypted_key_fragment(const uint8_t *decrypted_fragment, 
+                                                uint32_t prev_timestamp, 
+                                                uint32_t curr_timestamp, 
+                                                const uint8_t *data, 
+                                                size_t data_size, 
+                                                uint8_t *hmac_output);
 
 int crypto_secure_memcmp(const void *a, const void *b, size_t size);
 

@@ -8,6 +8,8 @@
 #include "mbedtls/md.h"
 #include "esp_random.h"
 
+#define HMAC_KEY_SIZE 16
+
 static const char *CRYPTO_LOG_GROUP = "ENCRYPTION";
 
 void generate_128b_key(key_128b * key)
@@ -49,127 +51,160 @@ void add_fragment_to_key_spliited(key_splitted * key_splitted, uint8_t *fragment
 }
 
 
-// Derive AES Key and IV from timestamps and session data
-void derive_aes_key_iv(uint32_t prev_timestamp, uint32_t current_timestamp, uint32_t session_data, uint8_t *aes_key, uint8_t *aes_iv) {
-    uint8_t input_buffer[sizeof(prev_timestamp) + sizeof(current_timestamp) + sizeof(session_data)];
-    memcpy(input_buffer, &prev_timestamp, sizeof(prev_timestamp));
-    memcpy(input_buffer + sizeof(prev_timestamp), &current_timestamp, sizeof(current_timestamp));
-    memcpy(input_buffer + sizeof(prev_timestamp) + sizeof(current_timestamp), &session_data, sizeof(session_data));
+void derive_aes_key_from_timestamps(uint32_t prev_timestamp, uint32_t curr_timestamp, uint8_t *key_out) {
+    uint8_t timestamps_combined[8];
+    memcpy(timestamps_combined, &prev_timestamp, sizeof(prev_timestamp));
+    memcpy(timestamps_combined + sizeof(prev_timestamp), &curr_timestamp, sizeof(curr_timestamp));
 
-    uint8_t hash_output[32]; // SHA-256 output
-    mbedtls_md_context_t ctx;
-    const mbedtls_md_info_t *md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-
-    mbedtls_md_init(&ctx);
-    mbedtls_md_setup(&ctx, md_info, 0);
-    mbedtls_md_starts(&ctx);
-    mbedtls_md_update(&ctx, input_buffer, sizeof(input_buffer));
-    mbedtls_md_finish(&ctx, hash_output);
-    mbedtls_md_free(&ctx);
-
-    memcpy(aes_key, hash_output, AES_KEY_SIZE);  // First 16 bytes for AES Key
-    memcpy(aes_iv, hash_output + AES_KEY_SIZE, AES_IV_SIZE);  // Next 16 bytes for AES IV
+    // Derive AES key by padding or hashing (this example uses direct copy for simplicity)
+    memset(key_out, 0, AES_KEY_SIZE);
+    memcpy(key_out, timestamps_combined, sizeof(timestamps_combined));
 }
 
-// Encrypt and generate HMAC
-void encrypt_key_fragment(const uint8_t *key_fragment, size_t fragment_size, 
-                          uint32_t prev_timestamp, uint32_t current_timestamp, 
-                          uint32_t session_data, uint8_t *encrypted_fragment, uint8_t *hmac) {
+// Encrypt a 4-byte key fragment
+bool encrypt_key_fragment(const uint8_t *fragment, uint32_t prev_timestamp, uint32_t curr_timestamp, uint8_t *encrypted_fragment) {
     uint8_t aes_key[AES_KEY_SIZE];
-    uint8_t aes_iv[AES_IV_SIZE];
+    uint8_t iv[AES_KEY_SIZE] = {0}; // IV initialized to zeros
+    size_t offset = 0;
+    uint8_t stream_block[AES_KEY_SIZE] = {0};
 
-    // Derive AES key and IV
-    derive_aes_key_iv(prev_timestamp, current_timestamp, session_data, aes_key, aes_iv);
+    // Derive AES key from timestamps
+    derive_aes_key_from_timestamps(prev_timestamp, curr_timestamp, aes_key);
 
-    // Encrypt the 4-byte key fragment
+    // Initialize AES context
     mbedtls_aes_context aes_ctx;
     mbedtls_aes_init(&aes_ctx);
-    mbedtls_aes_setkey_enc(&aes_ctx, aes_key, AES_KEY_SIZE * 8);
-    uint8_t iv[AES_IV_SIZE];
-    memcpy(iv, aes_iv, AES_IV_SIZE);
-    mbedtls_aes_crypt_ctr(&aes_ctx, fragment_size, &fragment_size, iv, NULL, key_fragment, encrypted_fragment);
-    mbedtls_aes_free(&aes_ctx);
-
-    // Prepare HMAC input: ciphertext + metadata
-    uint8_t hmac_input[fragment_size + sizeof(prev_timestamp) + sizeof(current_timestamp)];
-    memcpy(hmac_input, encrypted_fragment, fragment_size);
-    memcpy(hmac_input + fragment_size, &prev_timestamp, sizeof(prev_timestamp));
-    memcpy(hmac_input + fragment_size + sizeof(prev_timestamp), &current_timestamp, sizeof(current_timestamp));
-
-    // Calculate HMAC and truncate to 4 bytes
-    uint8_t full_hmac[32];
-    mbedtls_md_context_t hmac_ctx;
-    const mbedtls_md_info_t *hmac_md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-
-    mbedtls_md_init(&hmac_ctx);
-    mbedtls_md_setup(&hmac_ctx, hmac_md_info, 1); // HMAC enabled
-    mbedtls_md_hmac_starts(&hmac_ctx, aes_key, AES_KEY_SIZE);
-    mbedtls_md_hmac_update(&hmac_ctx, hmac_input, sizeof(hmac_input));
-    mbedtls_md_hmac_finish(&hmac_ctx, full_hmac);
-    mbedtls_md_free(&hmac_ctx);
-
-    memcpy(hmac, full_hmac, HMAC_SIZE); // Use first 4 bytes of HMAC
-}
-
-bool decrypt_key_fragment(const uint8_t *encrypted_fragment, size_t fragment_size, 
-                          uint32_t prev_timestamp, uint32_t current_timestamp, 
-                          uint32_t session_data, const uint8_t *hmac_received, 
-                          uint8_t *decrypted_fragment) {
-    uint8_t aes_key[AES_KEY_SIZE];
-    uint8_t aes_iv[AES_IV_SIZE];
-
-    // Derive AES key and IV
-    derive_aes_key_iv(prev_timestamp, current_timestamp, session_data, aes_key, aes_iv);
-
-    // Decrypt the 4-byte encrypted key fragment
-    mbedtls_aes_context aes_ctx;
-    mbedtls_aes_init(&aes_ctx);
-    mbedtls_aes_setkey_enc(&aes_ctx, aes_key, AES_KEY_SIZE * 8);
-    uint8_t iv[AES_IV_SIZE];
-    memcpy(iv, aes_iv, AES_IV_SIZE);
-    mbedtls_aes_crypt_ctr(&aes_ctx, fragment_size, &fragment_size, iv, NULL, encrypted_fragment, decrypted_fragment);
-    mbedtls_aes_free(&aes_ctx);
-
-    // Prepare HMAC input: ciphertext + metadata
-    uint8_t hmac_input[fragment_size + sizeof(prev_timestamp) + sizeof(current_timestamp)];
-    memcpy(hmac_input, encrypted_fragment, fragment_size);
-    memcpy(hmac_input + fragment_size, &prev_timestamp, sizeof(prev_timestamp));
-    memcpy(hmac_input + fragment_size + sizeof(prev_timestamp), &current_timestamp, sizeof(current_timestamp));
-
-    // Calculate HMAC and truncate to 4 bytes
-    uint8_t full_hmac[32];
-    uint8_t hmac_calculated[HMAC_SIZE];
-    mbedtls_md_context_t hmac_ctx;
-    const mbedtls_md_info_t *hmac_md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-
-    mbedtls_md_init(&hmac_ctx);
-    mbedtls_md_setup(&hmac_ctx, hmac_md_info, 1); // HMAC enabled
-    mbedtls_md_hmac_starts(&hmac_ctx, aes_key, AES_KEY_SIZE);
-    mbedtls_md_hmac_update(&hmac_ctx, hmac_input, sizeof(hmac_input));
-    mbedtls_md_hmac_finish(&hmac_ctx, full_hmac);
-    mbedtls_md_free(&hmac_ctx);
-
-    memcpy(hmac_calculated, full_hmac, HMAC_SIZE);
-
-    // Compare calculated HMAC with received HMAC
-    if (memcmp(hmac_calculated, hmac_received, HMAC_SIZE) != 0) {
-        ESP_LOGE(CRYPTO_LOG_GROUP, "HMAC verification failed!");
+    if (mbedtls_aes_setkey_enc(&aes_ctx, aes_key, AES_KEY_SIZE * 8) != 0) {
+        ESP_LOGE(CRYPTO_LOG_GROUP, "Failed to set AES encryption key");
+        mbedtls_aes_free(&aes_ctx);
         return false;
     }
 
-    ESP_LOGI(CRYPTO_LOG_GROUP, "HMAC verified successfully.");
+    // Encrypt the fragment using AES-CTR
+    int ret = mbedtls_aes_crypt_ctr(&aes_ctx, KEY_FRAGMENT_SIZE, &offset, iv, stream_block, fragment, encrypted_fragment);
+    if (ret != 0) {
+        ESP_LOGE(CRYPTO_LOG_GROUP, "mbedtls_aes_crypt_ctr failed: %d", ret);
+        mbedtls_aes_free(&aes_ctx);
+        return false;
+    }
+
+    mbedtls_aes_free(&aes_ctx);
     return true;
+}
+
+bool calculate_hmac_with_decrypted_key_fragment(const uint8_t *decrypted_fragment, 
+                                                uint32_t prev_timestamp, 
+                                                uint32_t curr_timestamp, 
+                                                const uint8_t *data, 
+                                                size_t data_size, 
+                                                uint8_t *hmac_output) {
+    uint8_t hmac_full_output[HMAC_KEY_SIZE]; // Full HMAC output
+    uint8_t hmac_input[8 + data_size];       // Combine metadata and data
+
+    // Combine data for HMAC input
+    size_t offset = 0;
+    memcpy(hmac_input + offset, &prev_timestamp, sizeof(prev_timestamp));
+    offset += sizeof(prev_timestamp);
+    memcpy(hmac_input + offset, &curr_timestamp, sizeof(curr_timestamp));
+    offset += sizeof(curr_timestamp);
+    memcpy(hmac_input + offset, data, data_size);
+    offset += data_size;
+
+    mbedtls_md_context_t ctx;
+    const mbedtls_md_info_t *md_info;
+
+    mbedtls_md_init(&ctx);  // Initialize context
+
+    md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (md_info == NULL) {
+        ESP_LOGE("HMAC", "Failed to get md info");
+        return false;
+    }
+
+    if (mbedtls_md_setup(&ctx, md_info, 1) != 0) {
+        ESP_LOGE("HMAC", "Failed to set up HMAC context");
+        mbedtls_md_free(&ctx); // Free partially initialized context
+        return false;
+    }
+
+    if (mbedtls_md_hmac_starts(&ctx, decrypted_fragment, KEY_FRAGMENT_SIZE) != 0 ||
+        mbedtls_md_hmac_update(&ctx, hmac_input, offset) != 0 ||
+        mbedtls_md_hmac_finish(&ctx, hmac_full_output) != 0) {
+        ESP_LOGE("HMAC", "Failed to calculate HMAC");
+        mbedtls_md_free(&ctx);
+        return false;
+    }
+
+    mbedtls_md_free(&ctx);  // Free initialized context
+
+    // Truncate HMAC to 4 bytes
+    memcpy(hmac_output, hmac_full_output, HMAC_SIZE);
+
+    return true;
+}
+
+// Decrypt a 4-byte key fragment
+bool decrypt_key_fragment(const uint8_t *encrypted_fragment, uint32_t prev_timestamp, uint32_t curr_timestamp, uint8_t *decrypted_fragment) {
+    uint8_t aes_key[AES_KEY_SIZE];
+    uint8_t iv[AES_KEY_SIZE] = {0}; // IV initialized to zeros
+    size_t offset = 0;
+    uint8_t stream_block[AES_KEY_SIZE] = {0};
+
+    // Derive AES key from timestamps
+    derive_aes_key_from_timestamps(prev_timestamp, curr_timestamp, aes_key);
+
+    // Initialize AES context
+    mbedtls_aes_context aes_ctx;
+    mbedtls_aes_init(&aes_ctx);
+    if (mbedtls_aes_setkey_enc(&aes_ctx, aes_key, AES_KEY_SIZE * 8) != 0) {
+        ESP_LOGE(CRYPTO_LOG_GROUP, "Failed to set AES decryption key");
+        mbedtls_aes_free(&aes_ctx);
+        return false;
+    }
+
+    // Decrypt the fragment using AES-CTR
+    int ret = mbedtls_aes_crypt_ctr(&aes_ctx, KEY_FRAGMENT_SIZE, &offset, iv, stream_block, encrypted_fragment, decrypted_fragment);
+    if (ret != 0) {
+        ESP_LOGE(CRYPTO_LOG_GROUP, "mbedtls_aes_crypt_ctr failed: %d", ret);
+        mbedtls_aes_free(&aes_ctx);
+        return false;
+    }
+
+    mbedtls_aes_free(&aes_ctx);
+    return true;
+}
+
+void process_received_fragment(const uint8_t *encrypted_fragment, 
+                               uint32_t prev_timestamp, 
+                               uint32_t curr_timestamp, 
+                               const uint8_t *received_hmac) {
+    uint8_t decrypted_fragment[KEY_FRAGMENT_SIZE];
+    uint8_t calculated_hmac[HMAC_SIZE];
+
+    // Decrypt the fragment
+    if (!decrypt_key_fragment(encrypted_fragment, prev_timestamp, curr_timestamp, decrypted_fragment)) {
+        ESP_LOGE("FRAGMENT", "Decryption failed");
+        return;
+    }
+
+    // Calculate HMAC
+    if (!calculate_hmac_with_decrypted_key_fragment(decrypted_fragment, prev_timestamp, curr_timestamp, encrypted_fragment, KEY_FRAGMENT_SIZE, calculated_hmac)) {
+        ESP_LOGE("FRAGMENT", "Failed to calculate HMAC");
+        return;
+    }
+
+    // Validate HMAC
+    if (memcmp(calculated_hmac, received_hmac, HMAC_SIZE) == 0) {
+        ESP_LOGI("FRAGMENT", "Key fragment validated successfully");
+    } else {
+        ESP_LOGE("FRAGMENT", "HMAC validation failed");
+    }
 }
 
 // Encrypt payload
 bool encrypt_payload(const uint8_t *key, const uint8_t *payload, size_t payload_size, 
                      const uint8_t *session_id, const uint8_t *nonce, 
                      uint8_t *encrypted_payload) {
-    if (payload_size < 14 || payload_size > 17) {
-        ESP_LOGE(CRYPTO_LOG_GROUP, "Invalid payload size. Must be 14-17 bytes.");
-        return false;
-    }
-
     uint8_t iv[AES_KEY_SIZE] = {0}; // 16-byte IV initialized to 0
     memcpy(iv, session_id, SESSION_ID_SIZE); // First 4 bytes of IV are the session ID
     memcpy(iv + SESSION_ID_SIZE, nonce, NONCE_SIZE); // Next 4 bytes are the nonce
@@ -178,10 +213,15 @@ bool encrypt_payload(const uint8_t *key, const uint8_t *payload, size_t payload_
     mbedtls_aes_init(&aes_ctx);
     mbedtls_aes_setkey_enc(&aes_ctx, key, AES_KEY_SIZE * 8);
 
-    size_t offset = 0;
-    uint8_t stream_block[AES_KEY_SIZE] = {0}; // Buffer for stream block
+    size_t offset = 0; // Offset for CTR mode
+    uint8_t stream_block[AES_KEY_SIZE] = {0}; // Stream block initialized to zeros
 
-    mbedtls_aes_crypt_ctr(&aes_ctx, payload_size, &offset, iv, stream_block, payload, encrypted_payload);
+    int ret = mbedtls_aes_crypt_ctr(&aes_ctx, payload_size, &offset, iv, stream_block, payload, encrypted_payload);
+    if (ret != 0) {
+        ESP_LOGE(CRYPTO_LOG_GROUP, "mbedtls_aes_crypt_ctr failed: %d", ret);
+        mbedtls_aes_free(&aes_ctx);
+        return false;
+    }
 
     mbedtls_aes_free(&aes_ctx);
 
@@ -193,11 +233,6 @@ bool encrypt_payload(const uint8_t *key, const uint8_t *payload, size_t payload_
 bool decrypt_payload(const uint8_t *key, const uint8_t *encrypted_payload, size_t payload_size, 
                      const uint8_t *session_id, const uint8_t *nonce, 
                      uint8_t *decrypted_payload) {
-    if (payload_size < 14 || payload_size > 17) {
-        ESP_LOGE(CRYPTO_LOG_GROUP, "Invalid payload size. Must be 14-17 bytes.");
-        return false;
-    }
-
     uint8_t iv[AES_KEY_SIZE] = {0}; // 16-byte IV initialized to 0
     memcpy(iv, session_id, SESSION_ID_SIZE); // First 4 bytes of IV are the session ID
     memcpy(iv + SESSION_ID_SIZE, nonce, NONCE_SIZE); // Next 4 bytes are the nonce
@@ -206,10 +241,15 @@ bool decrypt_payload(const uint8_t *key, const uint8_t *encrypted_payload, size_
     mbedtls_aes_init(&aes_ctx);
     mbedtls_aes_setkey_enc(&aes_ctx, key, AES_KEY_SIZE * 8);
 
-    size_t offset = 0;
-    uint8_t stream_block[AES_KEY_SIZE] = {0}; // Buffer for stream block
+    size_t offset = 0; // Offset for CTR mode
+    uint8_t stream_block[AES_KEY_SIZE] = {0}; // Stream block initialized to zeros
 
-    mbedtls_aes_crypt_ctr(&aes_ctx, payload_size, &offset, iv, stream_block, encrypted_payload, decrypted_payload);
+    int ret = mbedtls_aes_crypt_ctr(&aes_ctx, payload_size, &offset, iv, stream_block, encrypted_payload, decrypted_payload);
+    if (ret != 0) {
+        ESP_LOGE(CRYPTO_LOG_GROUP, "mbedtls_aes_crypt_ctr failed: %d", ret);
+        mbedtls_aes_free(&aes_ctx);
+        return false;
+    }
 
     mbedtls_aes_free(&aes_ctx);
 

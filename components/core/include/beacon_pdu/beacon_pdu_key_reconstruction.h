@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "beacon_key_data.h"
-#include "beacon_marker.h"
+#include "beacon_pdu/beacon_key_data.h"
+#include "beacon_pdu/beacon_marker.h"
 
 typedef struct {
     beacon_marker marker;

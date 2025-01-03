@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "beacon_marker.h"
-#include "crypto.h"
+#include "beacon_pdu/beacon_marker.h"
+#include "crypto/crypto.h"
 
 #define MAX_GAP_DATA_LEN 31
 #define MAX_PDU_PAYLOAD_SIZE (MAX_GAP_DATA_LEN - (MARKER_STRUCT_SIZE + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(NONCE_SIZE * sizeof(uint8_t))))

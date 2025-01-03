@@ -66,6 +66,8 @@
         "ble_broadcast_security_key_transmitter_engine.h": "c",
         "set": "c",
         "stddef.h": "c",
-        "esp_crc.h": "c"
+        "esp_crc.h": "c",
+        "beacon_pdu_helpers.h": "c",
+        "esp_bt.h": "c"
     }
 }

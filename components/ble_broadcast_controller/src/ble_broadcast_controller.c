@@ -149,6 +149,7 @@ static void ble_sender_main(void) {
             switch (evt.event_type) {
                 case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
                     if (bc.data_set_cb) {
+                        ESP_LOGE(BROADCAST_LOG_GROUP, "New Data Set!");
                         bc.data_set_cb();
                     }
                     break;
@@ -320,9 +321,11 @@ void stop_broadcasting()
 
 void start_broadcasting() {
     if (get_scanner_state() == SCANNER_CONTROLLER_SCANNING_ACTIVE) {
+        ESP_LOGE(BROADCAST_LOG_GROUP, "Stopping Broadcasting");
         stop_scanning(); // Ensure no overlap
     }
     if (get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING) {
+        ESP_LOGE(BROADCAST_LOG_GROUP, "Starting Broadcasting");
         esp_ble_gap_start_advertising(&default_ble_adv_params);
         set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
     }

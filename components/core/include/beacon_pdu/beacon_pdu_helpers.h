@@ -5,9 +5,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "beacon_marker.h"
-#include "beacon_pdu_data.h"
-#include "beacon_pdu_key_reconstruction.h"
+#include "beacon_pdu/beacon_marker.h"
+#include "beacon_pdu/beacon_pdu_data.h"
+#include "beacon_pdu/beacon_pdu_key_reconstruction.h"
 
 typedef enum {
     PDU_KEY_RECONSTRUCTION,

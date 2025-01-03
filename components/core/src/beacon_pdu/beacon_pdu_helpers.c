@@ -1,6 +1,6 @@
 #include "beacon_pdu/beacon_pdu_data.h"
 #include "beacon_pdu/beacon_pdu_helpers.h"
-#include "beacon_pdu_key_reconstruction.h"
+#include "beacon_pdu/beacon_pdu_key_reconstruction.h"
 #include <string.h>
 #include "esp_log.h"
 

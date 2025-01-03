@@ -401,15 +401,24 @@ void start_up_key_fragment_sending()
     uint32_t time_interval_ms = get_random_time_interval();
     transmitter_control_st.transmitter_key_encryption_pars.key_data.next_packet_arrival_ms = time_interval_ms;
     esp_timer_start_once(transmitter_control_st.key_fragment_schedule_st.timer, time_interval_ms * 1000);
+
     encrypt_key_fragment(
         transmitter_control_st.key_fragments.fragment[transmitter_control_st.transmitter_key_encryption_pars.key_fragment],
-        KEY_FRAGMENT_SIZE,
         transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp,
         transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp,
-        transmitter_control_st.transmitter_key_encryption_pars.key_data.session_data,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.enc_key_fragment
+    );
+
+
+    calculate_hmac_with_decrypted_key_fragment(
+        transmitter_control_st.key_fragments.fragment[transmitter_control_st.transmitter_key_encryption_pars.key_fragment],
+        transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp,
         transmitter_control_st.transmitter_key_encryption_pars.key_data.enc_key_fragment,
+        KEY_FRAGMENT_SIZE,
         transmitter_control_st.transmitter_key_encryption_pars.key_data.key_fragment_hmac
     );
+
     build_beacon_pdu_key(&transmitter_control_st.transmitter_key_encryption_pars.key_data, &transmitter_control_st.transmitter_key_encryption_pars.encrypted_key_pdu);
     save_last_pdu_timestamp();
     increment_next_key_fragment_index();
@@ -421,13 +430,20 @@ void encrypt_nexy_key_fragment(uint32_t time_interval_ms)
     transmitter_control_st.transmitter_key_encryption_pars.key_data.next_packet_arrival_ms = time_interval_ms;
     encrypt_key_fragment(
         transmitter_control_st.key_fragments.fragment[transmitter_control_st.transmitter_key_encryption_pars.key_fragment],
-        KEY_FRAGMENT_SIZE,
         transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp,
         transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp,
-        transmitter_control_st.transmitter_key_encryption_pars.key_data.session_data,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.enc_key_fragment
+    );
+
+    calculate_hmac_with_decrypted_key_fragment(
+        transmitter_control_st.key_fragments.fragment[transmitter_control_st.transmitter_key_encryption_pars.key_fragment],
+        transmitter_control_st.transmitter_key_encryption_pars.last_pdu_timestamp,
+        transmitter_control_st.transmitter_key_encryption_pars.key_data.timestamp,
         transmitter_control_st.transmitter_key_encryption_pars.key_data.enc_key_fragment,
+        KEY_FRAGMENT_SIZE,
         transmitter_control_st.transmitter_key_encryption_pars.key_data.key_fragment_hmac
     );
+
     build_beacon_pdu_key(&transmitter_control_st.transmitter_key_encryption_pars.key_data, &transmitter_control_st.transmitter_key_encryption_pars.encrypted_key_pdu);
     save_last_pdu_timestamp();
     increment_next_key_fragment_index();

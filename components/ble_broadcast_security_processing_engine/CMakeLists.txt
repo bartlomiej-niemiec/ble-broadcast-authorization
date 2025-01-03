@@ -10,6 +10,6 @@ idf_component_register(SRCS "src/ble_consumer/ble_consumer_collection.c"
                                       "./internal/ble_consumer"
                                       "./internal/key_cache"
                                       "./internal/key_reconstruction"
-                    PRIV_REQUIRES core     
-                    PRIV_REQUIRES utils
+                    PRIV_REQUIRES "core"     
+                    PRIV_REQUIRES "utils"
                     )
