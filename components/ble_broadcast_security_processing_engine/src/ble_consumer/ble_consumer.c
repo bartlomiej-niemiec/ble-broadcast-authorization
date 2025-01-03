@@ -96,17 +96,15 @@ int reset_ble_consumer(ble_consumer *p_ble_consumer) {
         return -1;
     }
 
-    if (xSemaphoreTake(p_ble_consumer->xMutex, portMAX_DELAY) == pdTRUE) {
-        p_ble_consumer->context.process_deferred_q_request_pending = false;
-        p_ble_consumer->last_pdu_timestamp = 0;
-        p_ble_consumer->context.recently_removed_key_id = -1;
-        p_ble_consumer->context.deferred_queue_count = 0;
-        p_ble_consumer->rollover = 0;
-        memset(&(p_ble_consumer->mac_address_arr), 0, sizeof(p_ble_consumer->mac_address_arr));
-        clear_cache(p_ble_consumer->context.key_cache);
-        xQueueReset(p_ble_consumer->context.deferredQueue);
-        xSemaphoreGive(p_ble_consumer->xMutex);
-    }
+    
+    p_ble_consumer->context.process_deferred_q_request_pending = false;
+    p_ble_consumer->last_pdu_timestamp = 0;
+    p_ble_consumer->context.recently_removed_key_id = -1;
+    p_ble_consumer->context.deferred_queue_count = 0;
+    p_ble_consumer->rollover = 0;
+    memset(&(p_ble_consumer->mac_address_arr), 0, sizeof(p_ble_consumer->mac_address_arr));
+    clear_cache(p_ble_consumer->context.key_cache);
+    xQueueReset(p_ble_consumer->context.deferredQueue);
 
     return 0;
 }

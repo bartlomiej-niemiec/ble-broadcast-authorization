@@ -173,7 +173,7 @@ bool init_reconstructor_resources(const uint8_t key_reconstruction_collection_si
 
     st_reconstructor_control.key_collection = create_new_key_collection(key_reconstruction_collection_size);
 
-    if (st_reconstructor_control.xQueueKeyReconstruction == NULL)
+    if (st_reconstructor_control.key_collection == NULL)
     {
         return false;
     }
@@ -210,15 +210,21 @@ RECONSTRUCTION_QUEUEING_STATUS queue_key_for_reconstruction(uint16_t key_id, uin
                 memcpy(q_in.key_hmac, key_hmac, HMAC_SIZE);
                 memcpy(q_in.consumer_mac_address, consumer_mac_address, sizeof(esp_bd_addr_t));
 
-                int queue_result = xQueueSend(st_reconstructor_control.xQueueKeyReconstruction, (void *)&q_in, QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS);
-                
+                const int MAX_RETRIES = 5;
+                int queue_result;
+                for (int i = 0; i < MAX_RETRIES; i++)
+                {
+                    queue_result = xQueueSend(st_reconstructor_control.xQueueKeyReconstruction, (void *)&q_in, QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS);
+                    if (queue_result == pdPASS)
+                    {
+                        xEventGroupSetBits(st_reconstructor_control.eventGroup, EVENT_NEW_KEY_FARGMENT_IN_QUEUE);
+                        break;
+                    }
+                }
+    
                 if (queue_result != pdPASS) {
                     ESP_LOGE(REC_LOG_GROUP, "Queue send failed for key_id: %d", key_id);
                     result = QUEUED_FAILED_NO_SPACE;
-                }
-                else
-                {
-                    xEventGroupSetBits(st_reconstructor_control.eventGroup, EVENT_NEW_KEY_FARGMENT_IN_QUEUE);
                 }
             }
             else

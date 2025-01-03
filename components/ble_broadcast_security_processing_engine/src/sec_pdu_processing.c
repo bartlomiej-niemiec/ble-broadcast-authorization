@@ -75,7 +75,8 @@ bool create_ble_broadcast_pdu_for_dispatcher(ble_broadcast_pdu* pdu, uint8_t *da
     if (size <= MAX_GAP_DATA_LEN)
     {
         memcpy(pdu->data, data, size);
-        memcpy(&(pdu->data_len), &size, sizeof(size));
+        pdu->data_len = size;
+
         memcpy(&(pdu->mac_address), mac_address, sizeof(esp_bd_addr_t));
         result = true;
     }
@@ -121,7 +122,7 @@ void handle_event_new_pdu()
     int batchCount = 0;
     beacon_pdu_data_with_mac_addr pduBatch[MAX_PROCESSED_PDUS_AT_ONCE] = {0};
     while (batchCount < MAX_PROCESSED_PDUS_AT_ONCE &&
-        xQueueReceive(sec_pdu_st.processingQueue, (void *)&pduBatch[batchCount], 0) == pdTRUE)
+        xQueueReceive(sec_pdu_st.processingQueue, (void *)&pduBatch[batchCount], QUEUE_TIMEOUT_SYS_TICKS) == pdTRUE)
     {
         batchCount++;
     }
@@ -307,6 +308,9 @@ void key_reconstruction_complete(uint8_t key_id, key_128b * const reconstructed_
         // Key successfully added to cache
         ESP_LOGI(SEC_PDU_PROC_LOG, "Key added to cache for device: %02x:%02x:%02x:%02x:%02x:%02x, Key ID: %d",
                  mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5], key_id);
+        
+        // Key successfully added to cache
+        ESP_LOG_BUFFER_HEX("Key: ", reconstructed_key->key, sizeof(key_128b));
 
         // Mark deferred queue for processing
         set_deferred_q_pending_processing(p_ble_consumer, true);
@@ -423,7 +427,7 @@ int enqueue_pdu_for_processing(beacon_pdu_data* pdu, esp_bd_addr_t mac_address)
         if (pdu != NULL && mac_address != NULL)
         {
             beacon_pdu_data_with_mac_addr temp_pdu;
-            temp_pdu.pdu = *pdu;
+            memcpy(&(temp_pdu.pdu), pdu, sizeof(beacon_pdu_data));
             memcpy(temp_pdu.mac_address, mac_address, sizeof(esp_bd_addr_t));
             stats = xQueueSend(sec_pdu_st.processingQueue, ( void * ) &temp_pdu, QUEUE_TIMEOUT_SYS_TICKS);
             if (stats)
@@ -434,4 +438,15 @@ int enqueue_pdu_for_processing(beacon_pdu_data* pdu, esp_bd_addr_t mac_address)
     }
 
     return stats;
+}
+
+void scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_size, esp_bd_addr_t mac_address)
+{
+    if (data != NULL)
+    {
+        if (is_pdu_in_beacon_pdu_format(data, data_size))
+        {
+            enqueue_pdu_for_processing((beacon_pdu_data *) data, mac_address);
+        }
+    }
 }

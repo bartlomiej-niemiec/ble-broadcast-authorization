@@ -11,7 +11,7 @@
     "idf.openOcdConfigs": [
         "board/esp32-wrover-kit-3.3v.cfg"
     ],
-    "idf.portWin": "COM4",
+    "idf.portWin": "COM3",
     "idf.pythonBinPathWin": "C:\\esp-idf-tools\\python_env\\idf5.4_py3.11_env\\Scripts\\python.exe",
     "idf.toolsPathWin": "C:\\esp-idf-tools",
     "idf.flashType": "UART",
@@ -56,6 +56,8 @@
         "ble_sender.h": "c",
         "esp_gap_ble_api.h": "c",
         "esp_log.h": "c",
-        "ble_security_payload_encryption.h": "c"
+        "ble_security_payload_encryption.h": "c",
+        "ble_send_pdu_counter.h": "c",
+        "optional": "c"
     }
 }

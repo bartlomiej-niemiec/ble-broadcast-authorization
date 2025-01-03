@@ -109,8 +109,12 @@ int clear_ble_consumer_from_collection(ble_consumer_collection * p_ble_consumer_
     int status = -1;
     if (p_ble_consumer_collection != NULL)
     {
-        reset_ble_consumer(&(p_ble_consumer_collection->arr[index]));
-        p_ble_consumer_collection->consumers_count--;
+        if (xSemaphoreTake(p_ble_consumer_collection->xMutex, portMAX_DELAY) == pdTRUE)
+        {
+            reset_ble_consumer(&(p_ble_consumer_collection->arr[index]));
+            p_ble_consumer_collection->consumers_count--;
+            xSemaphoreGive(p_ble_consumer_collection->xMutex);
+        }
     }
     return status;
 }

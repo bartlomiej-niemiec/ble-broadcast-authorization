@@ -12,4 +12,5 @@ idf_component_register(SRCS "src/ble_consumer/ble_consumer_collection.c"
                                       "./internal/key_reconstruction"
                     PRIV_REQUIRES core     
                     PRIV_REQUIRES utils
+                    PRIV_REQUIRES "ble_broadcast_controller"
                     )

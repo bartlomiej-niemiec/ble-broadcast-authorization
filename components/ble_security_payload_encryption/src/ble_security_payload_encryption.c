@@ -34,6 +34,7 @@ static esp_timer_create_args_t key_replacement_timer_args = {
 void key_replacement_cb(void *arg)
 {
     generate_128b_key(&next_pre_shared_key);
+    ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(next_pre_shared_key));
     split_128b_key_to_fragment(&next_pre_shared_key, &next_splitted_pre_shared_key);
     is_key_replace_request_active = true;
     esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US);
@@ -56,6 +57,7 @@ bool init_payload_encryption()
     {
         key_id = get_random_key_id();
         generate_128b_key(&pre_shared_key);
+        ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(pre_shared_key));
         split_128b_key_to_fragment(&pre_shared_key, &splitted_pre_shared_key);
         if (esp_timer_create(&key_replacement_timer_args, &key_replacement_timer) != ESP_OK)
         {
@@ -105,11 +107,13 @@ int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * en
 
     build_nonce(nonce, &(encrypted_pdu->marker), key_fragment_no, key_id, random_xor_seed);
 
-
-    memset(encrypt_payload_arr, 0, sizeof(encrypt_payload_arr));
+    uint8_t encrypt_payload_arr[MAX_PDU_PAYLOAD_SIZE] = {0};  // Local buffer for encryption
     memcpy(encrypt_payload_arr, payload, payload_size);
-    aes_ctr_encrypt_payload(encrypt_payload_arr, payload_size, pre_shared_key.key, nonce, encrypt_payload_arr);
-    memcpy(encrypted_pdu->payload, encrypt_payload_arr, payload_size);
+
+    uint8_t encrypted_payload[MAX_PDU_PAYLOAD_SIZE] = {0};  // Output buffer
+    aes_ctr_encrypt_payload(encrypt_payload_arr, payload_size, pre_shared_key.key, nonce, encrypted_payload);
+
+    memcpy(encrypted_pdu->payload, encrypted_payload, payload_size);
 
     return 0;
 }
