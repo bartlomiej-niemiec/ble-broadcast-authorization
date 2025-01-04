@@ -1,9 +1,8 @@
 #include "ble_security_payload_encryption.h"
 #include "ble_broadcast_controller.h"
-#include "ble_send_pdu_counter.h"
-#include "ble_broadcast.h"
 #include "esp_log.h"
 #include "stdio.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include <string.h>
@@ -90,8 +89,8 @@ bool encrypt_new_payload()
     counter++;
     uint8_t payload[MAX_PDU_PAYLOAD_SIZE] = {0};
     memcpy(payload, &counter, sizeof(counter));
-    ESP_LOG_BUFFER_HEX("Payload Set: ", payload, sizeof(payload));
-    ESP_LOGI(SENDER_APP_LOG_GROUP, "Payload uint32_t: %lu ", counter);
+    //ESP_LOG_BUFFER_HEX("Payload Set: ", payload, sizeof(payload));
+    //ESP_LOGI(SENDER_APP_LOG_GROUP, "Payload uint32_t: %lu ", counter);
     // if (payload_build_size <= 0)
     // {
     //     ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed to build payload");
@@ -99,13 +98,13 @@ bool encrypt_new_payload()
     // }
     beacon_pdu_data pdu = {0};
     fill_marker_in_pdu(&pdu);
-    int encrypt_status = encrypt_payload(payload, MAX_PDU_PAYLOAD_SIZE, &pdu);
+    int encrypt_status = encrypt_payload(payload, sizeof(counter), &pdu);
     if (encrypt_status != 0)
     {
         ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed to encrypt payload, error code: %d", encrypt_status);
         return false;
     }
             
-    set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_pdu_data));
+    set_broadcasting_payload((uint8_t *)&pdu, get_beacon_pdu_data_len(&pdu));
     return true;
 }

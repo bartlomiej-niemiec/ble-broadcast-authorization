@@ -152,9 +152,12 @@ void handle_event_new_pdu()
             continue;
         }
 
-        key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].pdu.bcd.key_id);
+        uint16_t key_id = get_key_id_from_key_session_data(pduBatch[i].pdu.bcd.key_session_data);
+        uint8_t key_fragment_index = get_key_fragment_index_from_key_session_data(pduBatch[i].pdu.bcd.key_session_data);
+
+        key = get_key_from_cache(p_ble_consumer->context.key_cache, key_id);
         if (key == NULL ) {
-            queue_key_for_reconstruction(pduBatch[i].pdu.bcd.key_id, pduBatch[i].pdu.bcd.key_fragment_no, 
+            queue_key_for_reconstruction(key_id, key_fragment_index, 
                                         pduBatch[i].pdu.bcd.enc_key_fragment, pduBatch[i].pdu.bcd.key_fragment_hmac, 
                                         pduBatch[i].pdu.bcd.xor_seed, pduBatch[i].mac_address);
             add_to_consumer_deferred_queue(p_ble_consumer, &(pduBatch[i].pdu));
@@ -199,7 +202,7 @@ static void handle_event_process_deferred_pdus() {
 void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address) {
     uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
     decrypt_pdu(key, pdu, output, sizeof(output));
-    notify_pdo_collection_observers(sec_pdu_st.payload_decription_subcribers_collection, output, MAX_PDU_PAYLOAD_SIZE, mac_address);
+    notify_pdo_collection_observers(sec_pdu_st.payload_decription_subcribers_collection, output, pdu->payload_size, mac_address);
 }
 
 void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * output, uint8_t output_len)
@@ -207,8 +210,8 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
     if (output_len == MAX_PDU_PAYLOAD_SIZE)
     {
         uint8_t nonce[NONCE_SIZE] = {0};
-        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_fragment_no, pdu->bcd.key_id, pdu->bcd.xor_seed);
-        aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload), key->key, nonce, output);
+        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_session_data, get_key_expected_time_interval_multiplier(pdu->bcd.key_exchange_data), pdu->bcd.xor_seed);
+        aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload_size), key->key, nonce, output);
     }
 }
 
@@ -220,14 +223,18 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
         counter++;
     }
     
-    const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[0].bcd.key_id);
-    uint8_t last_key_id = pduBatch[0].bcd.key_id;
+    uint16_t last_key_id = get_key_id_from_key_session_data(pduBatch[0].bcd.key_session_data);
+    const key_128b *key = get_key_from_cache(p_ble_consumer->context.key_cache, last_key_id);
+
     for (int i = 0; i < counter; i++)
     {
-        if (last_key_id != pduBatch[i].bcd.key_id)
+        uint16_t key_id = get_key_id_from_key_session_data(pduBatch[i].bcd.key_session_data);
+        uint8_t key_fragment_index = get_key_fragment_index_from_key_session_data(pduBatch[i].bcd.key_session_data);
+
+        if (last_key_id != key_id)
         {
-            key = get_key_from_cache(p_ble_consumer->context.key_cache, pduBatch[i].bcd.key_id);
-            last_key_id = pduBatch[i].bcd.key_id;
+            key = get_key_from_cache(p_ble_consumer->context.key_cache, key_fragment_index);
+            last_key_id = key_id;
         }
 
         if (key != NULL)
@@ -237,9 +244,13 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
         else
         {   
             /// Drop PDU from removed key
-            if (pduBatch[i].bcd.key_id != p_ble_consumer->context.recently_removed_key_id)
+            if (key_id != p_ble_consumer->context.recently_removed_key_id)
             {
                 add_to_consumer_deferred_queue(p_ble_consumer, &pduBatch[i]);
+            }
+            else
+            {
+                ESP_LOGE(SEC_PROCESSING_TASK_NAME, "DROPPED PACKET!");
             }
         }
     }
@@ -446,7 +457,14 @@ void scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_siz
     {
         if (is_pdu_in_beacon_pdu_format(data, data_size))
         {
-            enqueue_pdu_for_processing((beacon_pdu_data *) data, mac_address);
+            ESP_LOGI(SEC_PDU_PROC_LOG, "Received PDU of tota len: %i", (int) data_size);
+            beacon_pdu_data pdu = {0};
+            size_t payload_size = get_payload_size_from_pdu(data_size);
+            memcpy(&pdu.marker, data, sizeof(beacon_marker));
+            memcpy(&pdu.bcd, &data[sizeof(beacon_marker)], sizeof(beacon_crypto_data));
+            memcpy(&pdu.payload, &data[sizeof(beacon_marker) + sizeof(beacon_crypto_data)], payload_size);
+            pdu.payload_size = payload_size;
+            enqueue_pdu_for_processing(&pdu, mac_address);
         }
     }
 }

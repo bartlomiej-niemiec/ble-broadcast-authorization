@@ -22,6 +22,7 @@ static key_128b next_pre_shared_key;
 static key_splitted next_splitted_pre_shared_key;
 static volatile bool is_key_replace_request_active = false;
 static uint16_t key_id;
+static uint8_t key_time_interval_multiplier;
 static uint8_t encrypt_payload_arr[MAX_PDU_PAYLOAD_SIZE] = {0};
 static  esp_timer_handle_t key_replacement_timer;
 void key_replacement_cb(void *arg);
@@ -45,9 +46,20 @@ uint16_t get_random_fragment_id()
     return (esp_random() % NO_KEY_FRAGMENTS);
 }
 
+uint8_t get_random_time_interval_value()
+{
+    return (esp_random() % MAX_TIME_INTERVAL_MULTIPLIER);
+}
+
 uint16_t get_random_key_id()
 {
     return ((esp_random() % (USHRT_MAX - 1)) + 1);
+}
+
+uint16_t get_random_pdus_count_to_incr_key_exchange_counter()
+{
+    const int BASE = 10;
+    return (10 + (esp_random() % 20));
 }
 
 bool init_payload_encryption()
@@ -56,6 +68,7 @@ bool init_payload_encryption()
     if (isInitialized == false)
     {
         key_id = get_random_key_id();
+        key_time_interval_multiplier = get_random_time_interval_value();
         generate_128b_key(&pre_shared_key);
         ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(pre_shared_key));
         split_128b_key_to_fragment(&pre_shared_key, &splitted_pre_shared_key);
@@ -97,15 +110,16 @@ int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * en
     const uint8_t random_xor_seed = get_random_seed();
     uint8_t nonce[NONCE_SIZE] = {0};
 
-    encrypted_pdu->bcd.key_fragment_no = key_fragment_no;
-    encrypted_pdu->bcd.key_id = key_id;
+    uint16_t pdu_key_session_data = produce_key_session_data(key_id, key_fragment_no);
+    encrypted_pdu->bcd.key_session_data = pdu_key_session_data;
+    encrypted_pdu->bcd.key_exchange_data = produce_key_exchange_data(key_time_interval_multiplier, 0);
     encrypted_pdu->bcd.xor_seed = random_xor_seed;
 
     xor_encrypt_key_fragment(splitted_pre_shared_key.fragment[key_fragment_no], encrypted_pdu->bcd.enc_key_fragment, random_xor_seed);
         
     calculate_hmac_of_fragment(splitted_pre_shared_key.fragment[key_fragment_no], encrypted_pdu->bcd.enc_key_fragment, encrypted_pdu->bcd.key_fragment_hmac);
 
-    build_nonce(nonce, &(encrypted_pdu->marker), key_fragment_no, key_id, random_xor_seed);
+    build_nonce(nonce, &(encrypted_pdu->marker), pdu_key_session_data, key_time_interval_multiplier, random_xor_seed);
 
     uint8_t encrypt_payload_arr[MAX_PDU_PAYLOAD_SIZE] = {0};  // Local buffer for encryption
     memcpy(encrypt_payload_arr, payload, payload_size);
@@ -114,6 +128,7 @@ int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * en
     aes_ctr_encrypt_payload(encrypt_payload_arr, payload_size, pre_shared_key.key, nonce, encrypted_payload);
 
     memcpy(encrypted_pdu->payload, encrypted_payload, payload_size);
+    encrypted_pdu->payload_size = payload_size;
 
     return 0;
 }

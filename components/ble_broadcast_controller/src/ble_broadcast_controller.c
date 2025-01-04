@@ -283,6 +283,7 @@ void set_broadcasting_payload(uint8_t *payload, size_t payload_size)
         if (payload_size <= MAX_GAP_DATA_LEN)
         {
             esp_ble_gap_config_adv_data_raw(payload, payload_size);
+            ESP_LOGI(BROADCAST_LOG_GROUP, "Set broadcasting payload of size: %i", (int) payload_size);
         } 
         xSemaphoreGive(bc.xMutex);
     }

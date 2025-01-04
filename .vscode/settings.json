@@ -58,6 +58,7 @@
         "esp_log.h": "c",
         "ble_security_payload_encryption.h": "c",
         "ble_send_pdu_counter.h": "c",
-        "optional": "c"
+        "optional": "c",
+        "iomanip": "c"
     }
 }

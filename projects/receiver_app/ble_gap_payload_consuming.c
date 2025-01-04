@@ -10,7 +10,7 @@ void payload_notifier(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address)
     {
         uint32_t val;
         memcpy(&val, data, sizeof(uint32_t));
-        ESP_LOG_BUFFER_HEX("Payload:", data, data_len);
+        ESP_LOGI("PAYLOAD_NOTIFIER", "Payload size: %i", (int) data_len);
         ESP_LOGI("PAYLOAD_NOTIFIER", "Payload uint32_t: %lu", val);
     }
 }
