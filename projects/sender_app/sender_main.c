@@ -8,6 +8,12 @@
 #include <string.h>
 #include <stdbool.h>
 
+typedef enum {
+    SENDER_WAIT_FOR_START_CMD,
+    SENDER_TEST_START_PDU,
+    SENDER_BROADCAST_PDU,
+    SENDER_TEST_END_PDU
+} sender_state_machine;
 
 volatile uint32_t counter = 0;
 volatile bool is_first_pdu = true;
@@ -27,7 +33,6 @@ static esp_ble_adv_params_t default_ble_adv_params = {
     .channel_map        = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
     };
-
 
 static uint32_t no_send_pdus = 0;
 
@@ -54,33 +59,79 @@ void app_main(void)
     }
 }
 
+void sender_wair_for_start_cmd();
+void sender_test_start_pdu();
+void sender_broadcast_pdu();
+void sender_test_end_pdu();
+int build_new_payload(uint8_t *data, size_t size);
+bool encrypt_new_payload();
+
 void ble_sender_main()
 {
-    const uint32_t TASK_DELAY_MS = 100;
+    int state_machine_state = SENDER_TEST_START_PDU;
     while (1)
     {
-        bool result = encrypt_new_payload();
-        if (!result)
-        {
-            vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_MS)); // Wait and continue the loop
-            continue;
-        }
-            
-        if (is_first_pdu == true)
-        {
-            start_broadcasting(&default_ble_adv_params);
-            is_first_pdu = false;
-        }
 
-        vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_MS)); // Wait before sending the next payload
+        switch (state_machine_state)
+        {
+            case SENDER_WAIT_FOR_START_CMD:
+            {
+                sender_wair_for_start_cmd();
+            }
+            break;
+
+            case SENDER_TEST_START_PDU:
+            {
+                sender_test_start_pdu();
+            }
+            break;
+
+            case SENDER_BROADCAST_PDU:
+            {
+                sender_broadcast_pdu();
+            }
+            break;
+
+            case SENDER_TEST_END_PDU:
+            {
+                sender_test_end_pdu();
+            }
+            break;
+        }
     }
 }
+
+void sender_wair_for_start_cmd();
+
+void sender_test_start_pdu();
+
+void sender_broadcast_pdu()
+{
+    static const uint32_t TASK_DELAY_MS = 100;
+    bool result = encrypt_new_payload();
+    if (!result)
+    {
+        vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_MS)); // Wait and continue the loop
+        return;
+    }
+            
+    if (is_first_pdu == true)
+    {
+        start_broadcasting(&default_ble_adv_params);
+        is_first_pdu = false;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_MS)); // Wait before sending the next payload
+}
+
+void sender_test_end_pdu();
+
+
 
 int build_new_payload(uint8_t *data, size_t size)
 {
     memset(data, 0, sizeof(size));
     memcpy(data, &counter, sizeof(counter));
-    //int result = snprintf(payload, sizeof(payload), "%s%i", PAYLOAD_HELLO, counter % 10000);
     return 0;
 } 
 
@@ -89,13 +140,6 @@ bool encrypt_new_payload()
     counter++;
     uint8_t payload[MAX_PDU_PAYLOAD_SIZE] = {0};
     memcpy(payload, &counter, sizeof(counter));
-    //ESP_LOG_BUFFER_HEX("Payload Set: ", payload, sizeof(payload));
-    //ESP_LOGI(SENDER_APP_LOG_GROUP, "Payload uint32_t: %lu ", counter);
-    // if (payload_build_size <= 0)
-    // {
-    //     ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed to build payload");
-    //     return false;
-    // }
     beacon_pdu_data pdu = {0};
     fill_marker_in_pdu(&pdu);
     int encrypt_status = encrypt_payload(payload, sizeof(counter), &pdu);

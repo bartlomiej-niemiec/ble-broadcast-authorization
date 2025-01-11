@@ -5,6 +5,8 @@
 #include "ble_gap_payload_consuming.h"
 #include "sec_pdu_processing.h"
 #include "ble_broadcast_controller.h"
+#include "pc_serial_communication.h"
+#include "receiver_serial_communication.h"
 
 static const char * BLE_GAP_LOG_GROUP = "BLE_RECEIVER";
 
@@ -30,7 +32,15 @@ void app_main(void)
         ESP_LOGI(BLE_GAP_LOG_GROUP, "Sec PDU Creation Failed: %i", sec_pdu_status);
         return;
     }
+
+    if (start_pc_serial_communication() != ESP_OK)
+    {
+        ESP_LOGE(BLE_GAP_LOG_GROUP, "Failed initializtion of pc communication");
+        return;
+    }
     
+    register_serial_data_received_cb(serial_data_received);
+
     bool init_stat = init_broadcast_controller();
     if (init_stat == true)
     {
