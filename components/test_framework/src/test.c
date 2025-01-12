@@ -124,7 +124,7 @@ void end_test_measurment()
     {
         if (memcmp(ble_test_consumers[i].mac_address, zero_mac, sizeof(esp_bd_addr_t)) != 0)
         {
-            ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "CONSUMER ADDR: ", ble_test_consumers[i].mac_address, sizeof(esp_bd_addr_t));
+            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: CONSUMER ADDR: ", ble_test_consumers[i].mac_address, sizeof(esp_bd_addr_t), 0);
             ESP_LOGI(TEST_ESP_LOG_GROUP, "TOTAL PACKET RECEIVED: %lu", ble_test_consumers[i].total_packets_received);
             ESP_LOGI(TEST_ESP_LOG_GROUP, "AVARAGE KEY RECONSTRUCTION TIME IN S: %f", (double) (ble_test_consumers[i].avarage_key_reconstruction_time / 1000));
             ESP_LOGI(TEST_ESP_LOG_GROUP, "NO KEY RECONSTRUCTED: %i", (int) ble_test_consumers[i].no_reconstructed_keys);
@@ -134,34 +134,34 @@ void end_test_measurment()
     }
 }
 
-void packet_received_cb(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address)
+void packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address)
 {
     int index = -1;
     if ((index = get_consumer_index(mac_address)) >= 0)
     {
         ble_test_consumers[index].total_packets_received++;
-        ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "Packet received from: ", mac_address, sizeof(esp_bd_addr_t));
-        ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "Packet payload: ", data, data_len);
+        ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from: ", mac_address, sizeof(esp_bd_addr_t), 0);
+        ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload: ", data, data_len, 0);
     }
     else
     {
         if ((index = add_consumer_to_table(mac_address)) >= 0)
         {
             ble_test_consumers[index].total_packets_received++;
-            ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "Packet received from: ", mac_address, sizeof(esp_bd_addr_t));
-            ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "Packet payload: ", data, data_len);
+            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from: ", mac_address, sizeof(esp_bd_addr_t), 0);
+            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload: ", data, data_len, 0);
         }
     }
 }
 
-void packet_send_cb(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address)
+void packet_send(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address)
 {
     if (memcmp(ble_test_producer.mac_address, zero_mac, sizeof(esp_bd_addr_t)) == 0)
     {
-        memset(ble_test_producer.mac_address, mac_address, sizeof(esp_bd_addr_t));
+        memcpy(ble_test_producer.mac_address, mac_address, sizeof(esp_bd_addr_t));
     }
-    ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "Packet received from: ", mac_address, sizeof(esp_bd_addr_t));
-    ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "Packet payload: ", data, data_len);
+    ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from: ", mac_address, sizeof(esp_bd_addr_t), 0);
+    ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload: ", data, data_len, 0);
 }
 
 void key_reconstruction_start(esp_bd_addr_t mac_address, uint16_t key_id)
@@ -198,7 +198,7 @@ void deferred_queue_percentage(double percentage, esp_bd_addr_t mac_address)
     {
         ble_test_consumers[index].deferred_queue.no_checks++;
         ble_test_consumers[index].deferred_queue.total_fill = percentage;
-        ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "CONSUMER ADDR: ", ble_test_consumers[index].mac_address, sizeof(esp_bd_addr_t));
+        ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: CONSUMER ADDR: ", ble_test_consumers[index].mac_address, sizeof(esp_bd_addr_t), 0);
         ESP_LOGI(TEST_ESP_LOG_GROUP, "Deferred Queue Fill: %f", percentage * 100);
     }
     {
@@ -206,7 +206,7 @@ void deferred_queue_percentage(double percentage, esp_bd_addr_t mac_address)
         {
             ble_test_consumers[index].deferred_queue.no_checks++;
             ble_test_consumers[index].deferred_queue.total_fill = percentage;
-            ESP_LOG_BUFFER_HEXDUMP(TEST_ESP_LOG_GROUP, "CONSUMER ADDR: ", ble_test_consumers[index].mac_address, sizeof(esp_bd_addr_t));
+            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: CONSUMER ADDR: ", ble_test_consumers[index].mac_address, sizeof(esp_bd_addr_t), 0);
             ESP_LOGI(TEST_ESP_LOG_GROUP, "Deferred Queue Fill: %f", percentage * 100);
         }
     }

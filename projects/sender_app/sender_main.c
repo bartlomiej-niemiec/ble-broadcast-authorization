@@ -3,10 +3,21 @@
 #include "esp_log.h"
 #include "stdio.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
+
+#include "pc_serial_communication.h"
+#include "beacon_test_pdu.h"
+
+#include "test.h"
 
 #include <string.h>
 #include <stdbool.h>
+
+#define MAX_SERIAL_MSG_SIZE 30
+
+#define TASK_DELAY_MS 50
+#define TASK_DELAY_SYSTICK pdMS_TO_TICKS(TASK_DELAY_MS)
 
 typedef enum {
     SENDER_WAIT_FOR_START_CMD,
@@ -18,12 +29,18 @@ typedef enum {
 volatile uint32_t counter = 0;
 volatile bool is_first_pdu = true;
 static const char* SENDER_APP_LOG_GROUP = "SENDER APP";
+static char PC_SERIAL_BUFFER[MAX_SERIAL_MSG_SIZE] = {0};
+static const char* START_CMD_SERIAL = "START_TEST";
+static SemaphoreHandle_t xStartCmdReceived;
 
 #define ADV_INT_MIN_MS 100
 #define ADV_INT_MAX_MS 110
 
 #define N_CONST 0.625
 #define MS_TO_N_CONVERTION(MS) ((uint16_t)((MS) / (N_CONST)))
+
+#define MAX_BLOCK_TIME_SEMAPHORE_MS 100
+#define MAX_BLOCK_TIME_SEMAPHORE_TICKS pdMS_TO_TICKS(MAX_BLOCK_TIME_SEMAPHORE_MS)
 
 static esp_ble_adv_params_t default_ble_adv_params = {
     .adv_int_min        = MS_TO_N_CONVERTION(ADV_INT_MIN_MS),
@@ -44,13 +61,38 @@ void data_set_success_cb()
     no_send_pdus++;
 }
 
+void serial_data_received(uint8_t * data, size_t data_len)
+{
+    memcpy(PC_SERIAL_BUFFER, (char *) data, data_len);
+    PC_SERIAL_BUFFER[data_len] = '\0';
+    ESP_LOGI(SENDER_APP_LOG_GROUP, "PC SERIAL MSG: %s", PC_SERIAL_BUFFER);
+    if (strstr(PC_SERIAL_BUFFER, START_CMD_SERIAL) != NULL)
+    {
+        xSemaphoreGive(xStartCmdReceived);
+    }
+}
+
 void app_main(void)
 {
     init_payload_encryption();
     bool init_controller = init_broadcast_controller();
+
+    xStartCmdReceived = xSemaphoreCreateBinary();
+    if (xStartCmdReceived == NULL)
+        return;
+    xSemaphoreTake(xStartCmdReceived, MAX_BLOCK_TIME_SEMAPHORE_TICKS);
+
     if (init_controller == true)
     {
         register_broadcast_new_data_callback(data_set_success_cb);
+
+        if (start_pc_serial_communication() != ESP_OK)
+        {
+            ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed initializtion of pc communication");
+            return;
+        }
+        register_serial_data_received_cb(serial_data_received);
+
         ble_sender_main();
     }
     else
@@ -59,74 +101,96 @@ void app_main(void)
     }
 }
 
-void sender_wair_for_start_cmd();
-void sender_test_start_pdu();
-void sender_broadcast_pdu();
-void sender_test_end_pdu();
+void sender_wair_for_start_cmd(int * state);
+void sender_test_start_pdu(int * state);
+void sender_broadcast_pdu(int * state);
+void sender_test_end_pdu(int * state);
 int build_new_payload(uint8_t *data, size_t size);
 bool encrypt_new_payload();
 
 void ble_sender_main()
 {
-    int state_machine_state = SENDER_TEST_START_PDU;
+    int state_machine_state = SENDER_WAIT_FOR_START_CMD;
     while (1)
     {
-
         switch (state_machine_state)
         {
             case SENDER_WAIT_FOR_START_CMD:
             {
-                sender_wair_for_start_cmd();
+                sender_wair_for_start_cmd(&state_machine_state);
             }
             break;
 
             case SENDER_TEST_START_PDU:
             {
-                sender_test_start_pdu();
+                sender_test_start_pdu(&state_machine_state);
             }
             break;
 
             case SENDER_BROADCAST_PDU:
             {
-                sender_broadcast_pdu();
+                sender_broadcast_pdu(&state_machine_state);
             }
             break;
 
             case SENDER_TEST_END_PDU:
             {
-                sender_test_end_pdu();
+                sender_test_end_pdu(&state_machine_state);
             }
             break;
         }
     }
 }
 
-void sender_wair_for_start_cmd();
-
-void sender_test_start_pdu();
-
-void sender_broadcast_pdu()
+void sender_wair_for_start_cmd(int *state)
 {
-    static const uint32_t TASK_DELAY_MS = 100;
+    if (xSemaphoreTake(xStartCmdReceived, MAX_BLOCK_TIME_SEMAPHORE_TICKS) == pdPASS)
+    {
+        ESP_LOGI(SENDER_APP_LOG_GROUP, "Received Start Command From Pc");
+        *state = SENDER_TEST_START_PDU;
+    }
+    vTaskDelay(TASK_DELAY_SYSTICK);
+}
+
+void sender_test_start_pdu(int *state)
+{
+    ESP_LOGI(SENDER_APP_LOG_GROUP, "Sending Start Broadcast PDUs");
+    beacon_test_pdu pdu;
+    if (build_test_start_pdu(&pdu) == ESP_OK)
+    {
+        set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_test_pdu));
+    }
+    start_broadcasting(&default_ble_adv_params);
+    vTaskDelay(ADV_INT_MAX_MS * 10);
+    init_test();
+    start_test_measurment();
+    ESP_LOGI(SENDER_APP_LOG_GROUP, "Changing state to broadcast pdus");
+    *state = SENDER_BROADCAST_PDU;
+}
+
+void sender_broadcast_pdu(int *state)
+{
+    static const uint32_t TEMP_TASK_DELAY_MS = 100;
     bool result = encrypt_new_payload();
     if (!result)
     {
-        vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_MS)); // Wait and continue the loop
+        vTaskDelay(pdMS_TO_TICKS(TEMP_TASK_DELAY_MS)); // Wait and continue the loop
         return;
     }
-            
-    if (is_first_pdu == true)
-    {
-        start_broadcasting(&default_ble_adv_params);
-        is_first_pdu = false;
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_MS)); // Wait before sending the next payload
+        
+    vTaskDelay(pdMS_TO_TICKS(TEMP_TASK_DELAY_MS)); // Wait before sending the next payload
 }
 
-void sender_test_end_pdu();
-
-
+void sender_test_end_pdu(int *state)
+{
+    beacon_test_pdu pdu;
+    if (build_test_end_pdu(&pdu) == ESP_OK)
+    {
+        set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_test_pdu));
+    }
+    vTaskDelay(ADV_INT_MAX_MS * 10);
+    stop_broadcasting();
+}
 
 int build_new_payload(uint8_t *data, size_t size)
 {

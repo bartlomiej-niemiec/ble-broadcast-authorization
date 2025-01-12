@@ -30,6 +30,8 @@
 #define ADV_INT_MIN_MS 100
 #define ADV_INT_MAX_MS 110
 
+#define MAX_SCAN_COMPLETE_CB 2
+
 static const char* BROADCAST_TASK_NAME = "BROADCAST TASK";
 static const char* BROADCAST_LOG_GROUP = "BROADCAST TASK";
 
@@ -49,7 +51,8 @@ typedef struct {
     esp_ble_adv_params_t ble_adv_params;
     broadcast_state_changed_callback state_change_cb;
     broadcast_new_data_set_cb data_set_cb;
-    scan_complete scan_complete_cb;
+    scan_complete scan_complete_cb[MAX_SCAN_COMPLETE_CB];
+    int scan_complete_cb_observers;
     SemaphoreHandle_t xMutex;
 } broadcast_control_structure;
 
@@ -60,7 +63,8 @@ static broadcast_control_structure bc =
     .scannerState = SCANNER_CONTROLLER_SCANNING_NOT_ACTIVE,
     .state_change_cb = NULL,
     .data_set_cb = NULL,
-    .scan_complete_cb = NULL
+    .scan_complete_cb = {NULL, NULL},
+    .scan_complete_cb_observers = 0
 };
 
 void set_broadcast_state(BroadcastState state);
@@ -173,8 +177,16 @@ static void ble_sender_main(void) {
                     break;
 
                 case ESP_GAP_BLE_SCAN_RESULT_EVT:
-                    if (bc.scan_complete_cb) {
-                        bc.scan_complete_cb(evt.timestamp, evt.payload, evt.payload_size, evt.mac_addr);
+                    if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
+                    {
+                        if (bc.scan_complete_cb_observers > 0)
+                        {
+                            for (int i = 0; i < bc.scan_complete_cb_observers; i++)
+                            {
+                                bc.scan_complete_cb[i](evt.timestamp, evt.payload, evt.payload_size, evt.mac_addr);
+                            }
+                        }
+                        xSemaphoreGive(bc.xMutex);
                     }
                     break;
 
@@ -271,7 +283,11 @@ void register_scan_complete_callback(scan_complete cb)
 {
     if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
     {
-        bc.scan_complete_cb = cb;
+        if (bc.scan_complete_cb_observers < 2)
+        {
+            bc.scan_complete_cb[bc.scan_complete_cb_observers] = cb;
+            bc.scan_complete_cb_observers++;
+        }
         xSemaphoreGive(bc.xMutex);
     }
 }

@@ -12,9 +12,9 @@ void start_test_measurment();
 
 void end_test_measurment();
 
-void packet_received_cb(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address);
+void packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address);
 
-void packet_send_cb(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address);
+void packet_send(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address);
 
 void key_reconstruction_start(esp_bd_addr_t mac_address, uint16_t key_id);
 
