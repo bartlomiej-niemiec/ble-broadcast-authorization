@@ -136,5 +136,5 @@ if __name__ == "__main__":
                         break
                     data += '\r\n'
                     csvfile.write(data)
-                time.sleep(0.025)
+                time.sleep(0.010)
 

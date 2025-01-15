@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 
 #include "esp_timer.h"
+#include "esp_random.h"
 
 #include "pc_serial_communication.h"
 #include "beacon_test_pdu.h"
@@ -19,7 +20,7 @@
 
 #define MAX_SERIAL_MSG_SIZE 30
 
-#define TEST_DURATION_IN_S 120
+#define TEST_DURATION_IN_S 180
 
 #define TASK_DELAY_MS 50
 #define TASK_DELAY_SYSTICK pdMS_TO_TICKS(TASK_DELAY_MS)
@@ -41,17 +42,17 @@ static atomic_int EndTest = 0;
 static esp_timer_handle_t xTestTimeoutTimer;
 static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
 
-#define ADV_INT_MIN_MS 100
-#define ADV_INT_MAX_MS 110
+#define ADV_INT_MIN_MS 300
+#define ADV_INT_MAX_MS 310
 
 #define N_CONST 0.625
 #define MS_TO_N_CONVERTION(MS) ((uint16_t)((MS) / (N_CONST)))
 
-#define MAX_BLOCK_TIME_SEMAPHORE_MS 100
+#define MAX_BLOCK_TIME_SEMAPHORE_MS 300
 #define MAX_BLOCK_TIME_SEMAPHORE_TICKS pdMS_TO_TICKS(MAX_BLOCK_TIME_SEMAPHORE_MS)
 
-#define TEST_PAYLOAD_BYTES_LEN 4
-#define TEST_ADV_INTERVAL 100
+#define TEST_PAYLOAD_BYTES_LEN 16
+#define TEST_ADV_INTERVAL 300
 
 static esp_ble_adv_params_t default_ble_adv_params = {
     .adv_int_min        = MS_TO_N_CONVERTION(ADV_INT_MIN_MS),
@@ -75,7 +76,6 @@ static esp_timer_create_args_t testTimeoutTimer = {
 static uint32_t no_send_pdus = 0;
 
 void ble_sender_main();
-int build_new_payload();
 bool encrypt_new_payload();
 void data_set_success_cb()
 {
@@ -129,7 +129,6 @@ void sender_wair_for_start_cmd(int * state);
 void sender_test_start_pdu(int * state);
 void sender_broadcast_pdu(int * state);
 void sender_test_end_pdu(int * state);
-int build_new_payload(uint8_t *data, size_t size);
 bool encrypt_new_payload();
 
 void ble_sender_main()
@@ -185,7 +184,7 @@ void sender_test_start_pdu(int *state)
         set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_test_pdu));
     }
     start_broadcasting(&default_ble_adv_params);
-    vTaskDelay(ADV_INT_MAX_MS * 5);
+    vTaskDelay(pdMS_TO_TICKS(ADV_INT_MAX_MS * 10));
     init_test();
     start_test_measurment(TEST_SENDER_ROLE);
     test_log_sender_data(TEST_PAYLOAD_BYTES_LEN, TEST_ADV_INTERVAL);
@@ -196,7 +195,7 @@ void sender_test_start_pdu(int *state)
 
 void sender_broadcast_pdu(int *state)
 {
-    static const uint32_t TEMP_TASK_DELAY_MS = 100;
+    static const uint32_t TEMP_TASK_DELAY_MS = ADV_INT_MIN_MS;
     if (((int) atomic_load(&EndTest)) == 1)
     {
         *state = SENDER_TEST_END_PDU;
@@ -220,22 +219,15 @@ void sender_test_end_pdu(int *state)
     {
         set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_test_pdu));
     }
-    vTaskDelay(ADV_INT_MAX_MS * 5);
+    vTaskDelay(pdMS_TO_TICKS(ADV_INT_MAX_MS * 10));
     end_test_measurment();
 }
-
-int build_new_payload(uint8_t *data, size_t size)
-{
-    memset(data, 0, sizeof(size));
-    memcpy(data, &counter, sizeof(counter));
-    return 0;
-} 
 
 bool encrypt_new_payload()
 {
     counter++;
     uint8_t payload[MAX_PDU_PAYLOAD_SIZE] = {0};
-    memcpy(payload, &counter, sizeof(counter));
+    esp_fill_random(payload, TEST_PAYLOAD_BYTES_LEN);
     test_log_packet_send(payload, MAX_PDU_PAYLOAD_SIZE, NULL);
     beacon_pdu_data pdu = {0};
     fill_marker_in_pdu(&pdu);

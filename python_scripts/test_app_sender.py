@@ -17,6 +17,7 @@ TIMESTR = time.strftime("%Y%m%d_%H%M%S")
 LOGFILEPATH = FILENAME + "_" + TIMESTR + ".txt"
 
 MAX_Q_SIZE = 20
+START_TIME_DELAY = 3
 
 START_CMD = "START_TEST"
 CSV_FIELDS = ["timestamp", "message", "data"]
@@ -139,7 +140,7 @@ if __name__ == "__main__":
                     csvfile.write(data)
 
                 if cmd_start_send is False:
-                    if time.time() - start_time > 10:
+                    if time.time() - start_time > START_TIME_DELAY:
                         protocol.write_line(START_CMD)
                         cmd_start_send = True
 
