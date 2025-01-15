@@ -13,4 +13,5 @@ idf_component_register(SRCS "src/ble_consumer/ble_consumer_collection.c"
                     PRIV_REQUIRES core     
                     PRIV_REQUIRES utils
                     PRIV_REQUIRES "ble_broadcast_controller"
+                    PRIV_REQUIRES "test_framework"
                     )

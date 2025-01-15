@@ -14,7 +14,7 @@ SERIAL_PORT_CONFIG = {
 
 FILENAME = "test_receiver"
 TIMESTR = time.strftime("%Y%m%d_%H%M%S")
-LOGFILEPATH = FILENAME + "_" + TIMESTR + ".csv"
+LOGFILEPATH = FILENAME + "_" + TIMESTR + ".txt"
 
 MAX_Q_SIZE = 20
 
@@ -25,6 +25,8 @@ CSV_DICT_TEMPLATE = {
     "message": "",
     "data": ""
 }
+
+TEST_END_MSG = "TEST ENDED"
 
 
 class LogWriter:
@@ -43,7 +45,7 @@ class LogWriter:
     def add_data_to_logging_queue(self, data):
         row_to_write = None
         if self._is_log_start(data):
-            self._queue.put(self._extract_data_from_serial(data))
+            self._queue.put(data)
 
     def _extract_data_from_serial(self, data):
         row_to_write = CSV_DICT_TEMPLATE.copy()
@@ -125,13 +127,14 @@ if __name__ == "__main__":
     Esp32ProtocolFactory.register_queue(queue)
     t = serial.threaded.ReaderThread(serial_port, Esp32ProtocolFactory.create_protocol)
     with t as protocol:
-        with open(LOGFILEPATH, 'w', newline='', encoding='utf-8') as csvfile:
-            csv_writer = csv.DictWriter(csvfile, fieldnames=CSV_FIELDS, delimiter=';')
-            csv_writer.writeheader()
+        with open(LOGFILEPATH, 'w', newline='\r\n', encoding='utf-8') as csvfile:
             while True:
                 if not queue.empty():
                     data = queue.get()
                     print(data)
-                    csv_writer.writerow(data)
+                    if TEST_END_MSG is data:
+                        break
+                    data += '\r\n'
+                    csvfile.write(data)
                 time.sleep(0.025)
 

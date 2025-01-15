@@ -60,6 +60,7 @@
         "ble_send_pdu_counter.h": "c",
         "optional": "c",
         "iomanip": "c",
-        "queue.h": "c"
+        "queue.h": "c",
+        "pc_serial_communication.h": "c"
     }
 }

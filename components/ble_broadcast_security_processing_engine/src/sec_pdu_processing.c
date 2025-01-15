@@ -6,6 +6,7 @@
 #include "key_reconstructor.h"
 #include "key_cache.h"
 #include "crypto.h"
+#include "test.h"
 
 //FreeRTOS
 #include "freertos/FreeRTOS.h"
@@ -68,6 +69,19 @@ static void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd
 static int init_sec_processing_resources();
 static void handle_event_new_pdu();
 static void handle_event_process_deferred_pdus();
+static double get_queue_elements_in_percentage(const uint32_t queue_count, const uint32_t queue_size)
+{
+    return (double)(queue_count / ((double)queue_size));
+}
+
+static void log_processing_queue_size()
+{
+    test_log_processing_queue_percentage(get_queue_elements_in_percentage(uxQueueMessagesWaiting(sec_pdu_st.processingQueue), MAX_PROCESSING_QUEUE_ELEMENTS));
+}
+
+void reset_processing()
+{
+}
 
 bool create_ble_broadcast_pdu_for_dispatcher(ble_broadcast_pdu* pdu, uint8_t *data, size_t size, esp_bd_addr_t mac_address)
 {
@@ -104,6 +118,8 @@ void sec_processing_main(void *arg)
         EventBits_t events = xEventGroupWaitBits(sec_pdu_st.eventGroup,
                                                  EVENT_NEW_PDU | EVENT_PROCESS_DEFFERRED_PDUS,
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
+
+        log_processing_queue_size();
 
         if (events & EVENT_NEW_PDU) {
             handle_event_new_pdu();
@@ -217,6 +233,9 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
 
 int process_deferred_queue(ble_consumer * p_ble_consumer)
 {
+    double queue_percentage = get_queue_elements_in_percentage(p_ble_consumer->context.deferred_queue_count, DEFERRED_QUEUE_SIZE);
+    test_log_deferred_queue_percentage(queue_percentage, p_ble_consumer->mac_address_arr);
+
     beacon_pdu_data pduBatch[MAX_PROCESSED_PDUS_AT_ONCE] = {0};
     int counter = 0;
     while (get_deferred_queue_item(p_ble_consumer, &pduBatch[counter]) == pdTRUE && MAX_PROCESSED_PDUS_AT_ONCE > counter) {
@@ -262,12 +281,13 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
 int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu)
 {
     BaseType_t stats = pdFAIL;
-    ESP_LOGI(SEC_PDU_PROC_LOG, "Adding data to deffered queue");
     if (sec_pdu_st.is_sec_pdu_processing_initialised == true)
     {
         if (pdu != NULL)
         {
             add_to_deferred_queue(p_ble_consumer, pdu);
+            double queue_percentage = get_queue_elements_in_percentage(p_ble_consumer->context.deferred_queue_count, DEFERRED_QUEUE_SIZE);
+            test_log_deferred_queue_percentage(queue_percentage, p_ble_consumer->mac_address_arr);
         }
     }
 

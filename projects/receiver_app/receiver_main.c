@@ -3,7 +3,6 @@
 #include "esp_gap_ble_api.h"
 #include "beacon_pdu_data.h"
 #include "beacon_test_pdu.h"
-#include "ble_gap_payload_consuming.h"
 #include "sec_pdu_processing.h"
 #include "ble_broadcast_controller.h"
 #include "test.h"
@@ -22,6 +21,7 @@ static const char * BLE_GAP_LOG_GROUP = "BLE_RECEIVER";
 typedef enum {
     RECEIVER_WAIT_FOR_TEST_START_PDU,
     RECEIVER_SCANNING_PDUS,
+    RECEIVER_CLEANUP_STATE
 } receiver_state_machine;
 
 static esp_ble_scan_params_t default_ble_scan_params = {
@@ -38,6 +38,7 @@ static EventGroupHandle_t receiverAppEventGroup;
 void ble_receiver_main_loop();
 void handle_wait_for_start_pdu(int *state, EventBits_t events);
 void handle_scanning_pdus(int *state, EventBits_t events);
+void handle_cleanup_state(int *state);
 void receiver_app_scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_size, esp_bd_addr_t mac_address);
 
 void app_main(void)
@@ -49,7 +50,7 @@ void app_main(void)
     int sec_pdu_status = start_up_sec_processing();
     if (sec_pdu_status == 0)
     {
-        register_payload_observer_cb(payload_notifier);
+        register_payload_observer_cb(test_log_packet_received);
         ESP_LOGI(BLE_GAP_LOG_GROUP, "Sec PDU Creation Success");
     }
     else
@@ -99,6 +100,12 @@ void ble_receiver_main_loop()
             }
             break;
 
+            case RECEIVER_CLEANUP_STATE:
+            {
+                handle_cleanup_state((int *) &state);
+            }
+            break;
+
             default:
                 break;
         };
@@ -110,7 +117,7 @@ void handle_wait_for_start_pdu(int *state, EventBits_t events)
     if (events & EVENT_START_PDU)
     {
         init_test();
-        start_test_measurment();
+        start_test_measurment(TEST_RECEIVER_ROLE);
         *state = RECEIVER_SCANNING_PDUS;
     }
 }
@@ -119,9 +126,16 @@ void handle_scanning_pdus(int *state, EventBits_t events)
 {
     if (events & EVENT_END_PDU)
     {
-        end_test_measurment();
-        *state = RECEIVER_WAIT_FOR_TEST_START_PDU;
+        *state = RECEIVER_CLEANUP_STATE;
     }
+}
+
+void handle_cleanup_state(int *state)
+{
+    static const uint32_t timeDelayMs = 2000;
+    vTaskDelay(pdMS_TO_TICKS(timeDelayMs));
+    end_test_measurment();
+    *state = RECEIVER_WAIT_FOR_TEST_START_PDU;
 }
 
 void receiver_app_scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_size, esp_bd_addr_t mac_address)

@@ -10,6 +10,8 @@
 #include "esp_log.h"
 #include "esp_err.h"
 
+#include "test.h"
+
 #define KEY_RECONSTRUCTION_TASK_SIZE 4096
 #define RECONSTRUCTOR_TASK_CORE 1
 #define RECONSTRUCTOR_TASK_PRIORITY 10
@@ -88,7 +90,7 @@ void handle_event_new_key_fragment_in_queue()
         if (is_key_in_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id) == false)
         {
             add_new_key_to_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
-            ESP_LOGI(REC_LOG_GROUP, "Adding new key to collection for reconstruction: %i", keyFragmentBatch[i].key_id);
+            test_log_key_reconstruction_start(keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
         }
 
         if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id, keyFragmentBatch[i].key_fragment_no) == false)
@@ -102,6 +104,7 @@ void handle_event_new_key_fragment_in_queue()
             reconstruct_key_from_key_fragments(st_reconstructor_control.key_collection, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             if (st_reconstructor_control.key_rec_cb != NULL)
             {
+                test_log_key_reconstruction_end(keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
                 st_reconstructor_control.key_rec_cb(keyFragmentBatch[i].key_id, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address);
             }
             remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
