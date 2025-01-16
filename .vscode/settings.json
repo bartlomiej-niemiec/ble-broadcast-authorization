@@ -61,6 +61,7 @@
         "optional": "c",
         "iomanip": "c",
         "queue.h": "c",
-        "pc_serial_communication.h": "c"
+        "pc_serial_communication.h": "c",
+        "beacon_test_pdu.h": "c"
     }
 }

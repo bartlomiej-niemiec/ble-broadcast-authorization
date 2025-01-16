@@ -8,6 +8,8 @@
 #include "crypto.h"
 #include "test.h"
 
+#include "beacon_test_pdu.h"
+
 //FreeRTOS
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -216,8 +218,14 @@ static void handle_event_process_deferred_pdus() {
 
 // Decrypt PDU and notify callback
 void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address) {
+    if (pdu == NULL && mac_address == NULL)
+        return;
     uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
-    decrypt_pdu(key, pdu, output, sizeof(output));
+    decrypt_pdu(key, pdu, output, MAX_PDU_PAYLOAD_SIZE);
+    if (pdu->payload_size > MAX_PDU_PAYLOAD_SIZE)
+    {
+        ESP_LOGE(SEC_PROCESSING_TASK_NAME, "PDU PAYLOAD SIZE %i GREATER THAN MAX SIZE!", (int) pdu->payload_size);
+    }
     notify_pdo_collection_observers(sec_pdu_st.payload_decription_subcribers_collection, output, pdu->payload_size, mac_address);
 }
 
@@ -227,7 +235,7 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
     {
         uint8_t nonce[NONCE_SIZE] = {0};
         build_nonce(nonce, &(pdu->marker), pdu->bcd.key_session_data, get_key_expected_time_interval_multiplier(pdu->bcd.key_exchange_data), pdu->bcd.xor_seed);
-        aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload_size), key->key, nonce, output);
+        aes_ctr_decrypt_payload(pdu->payload, pdu->payload_size, key->key, nonce, output);
     }
 }
 
@@ -485,6 +493,13 @@ void scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_siz
             memcpy(&pdu.payload, &data[sizeof(beacon_marker) + sizeof(beacon_crypto_data)], payload_size);
             pdu.payload_size = payload_size;
             enqueue_pdu_for_processing(&pdu, mac_address);
+        }
+        else
+        {
+            if (is_pdu_from_expected_sender(mac_address) == true && is_test_pdu(data, data_size) != false)
+            {
+                test_log_bad_structure_packet(mac_address);
+            }
         }
     }
 }

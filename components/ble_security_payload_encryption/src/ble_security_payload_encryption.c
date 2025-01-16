@@ -12,7 +12,9 @@
 #include <stdint.h>
 #include <limits.h>
 
-#define KEY_REPLACEMENT_TIMEOUT_S 15
+#include "test.h"
+
+#define KEY_REPLACEMENT_TIMEOUT_S 30
 #define KEY_REPLACEMENT_TIMEOUT_US (KEY_REPLACEMENT_TIMEOUT_S * (1000000))
 
 static const char* MSG_SENDER_LOG_GROUP = "MSG_ENCRYPTOR";
@@ -39,6 +41,7 @@ void key_replacement_cb(void *arg)
     split_128b_key_to_fragment(&next_pre_shared_key, &next_splitted_pre_shared_key);
     is_key_replace_request_active = true;
     esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US);
+    test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_S);
 }
 
 uint16_t get_random_fragment_id()
@@ -88,6 +91,7 @@ int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * en
     if (isTimerFirstStarted == false)
     {
         esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US);
+        test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_S);
         isTimerFirstStarted = true;
     }
 

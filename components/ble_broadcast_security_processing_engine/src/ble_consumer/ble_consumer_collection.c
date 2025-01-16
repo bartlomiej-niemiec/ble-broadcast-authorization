@@ -30,6 +30,7 @@ ble_consumer_collection * create_ble_consumer_collection(const uint8_t collectio
 
     for (int i = 0; i < collection_size; i++) {
         if (create_ble_consumer_resources(&p_collection->arr[i], sender_key_cache_size) != 0) {
+            ESP_LOGE("BLE_COLLECTION", "Failed to create ble consumer resources!");
             for (int j = 0; j < i; j++) {
                 destroy_ble_consumer(&p_collection->arr[j]);
             }
@@ -38,7 +39,18 @@ ble_consumer_collection * create_ble_consumer_collection(const uint8_t collectio
             free(p_collection);
             return NULL;
         }
-        init_ble_consumer(&p_collection->arr[i]);
+
+        if ( init_ble_consumer(&p_collection->arr[i]) != 0)
+        {
+            ESP_LOGE("BLE_COLLECTION", "Failed to init ble consumer resources!");
+            for (int j = 0; j < i; j++) {
+                destroy_ble_consumer(&p_collection->arr[j]);
+            }
+            free(p_collection->arr);
+            vSemaphoreDelete(p_collection->xMutex);
+            free(p_collection);
+            return NULL;
+        }
     }
 
     return p_collection;

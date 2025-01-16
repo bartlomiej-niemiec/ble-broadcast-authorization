@@ -123,5 +123,5 @@ uint8_t produce_key_exchange_data(uint8_t pdu_time_interval_ms, uint8_t key_exch
 
 size_t get_payload_size_from_pdu(size_t total_pdu_len)
 {
-    return (total_pdu_len - (sizeof(CRYPT_DATA_SIZE) + sizeof(MARKER_SIZE)));
+    return (total_pdu_len - (CRYPT_DATA_SIZE + MARKER_STRUCT_SIZE));
 }

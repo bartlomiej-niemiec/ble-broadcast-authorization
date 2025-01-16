@@ -59,6 +59,8 @@ void app_main(void)
         return;
     }
 
+    init_test();
+
     bool init_stat = init_broadcast_controller();
     if (init_stat == true)
     {
@@ -116,7 +118,6 @@ void handle_wait_for_start_pdu(int *state, EventBits_t events)
 {
     if (events & EVENT_START_PDU)
     {
-        init_test();
         start_test_measurment(TEST_RECEIVER_ROLE);
         *state = RECEIVER_SCANNING_PDUS;
     }

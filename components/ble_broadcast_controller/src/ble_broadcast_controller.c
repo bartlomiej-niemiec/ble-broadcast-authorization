@@ -32,6 +32,9 @@
 
 #define MAX_SCAN_COMPLETE_CB 2
 
+#define EVENT_QUEUE_TIMEOUT_MS 20
+#define EVENT_QUEUE_TIMEOUT_SYSTICK pdMS_TO_TICKS(EVENT_QUEUE_TIMEOUT_MS)
+
 static const char* BROADCAST_TASK_NAME = "BROADCAST TASK";
 static const char* BROADCAST_LOG_GROUP = "BROADCAST TASK";
 
@@ -96,7 +99,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     }
 
     // Attempt to send event to task queue
-    if (xQueueSend(bc.eventQueue, &evt, pdMS_TO_TICKS(QUEUE_TIMEOUT_MS)) != pdPASS) {
+    if (xQueueSend(bc.eventQueue, &evt, EVENT_QUEUE_TIMEOUT_SYSTICK) != pdPASS) {
         ESP_LOGW(BROADCAST_LOG_GROUP, "Event queue full! Dropping event type: %d", event);
     }
 }
@@ -145,7 +148,7 @@ static void ble_sender_main(void) {
 
     while (1) {
         // Receive events with a timeout for periodic maintenance
-        if (xQueueReceive(bc.eventQueue, &evt, pdMS_TO_TICKS(500)) == pdTRUE) {
+        if (xQueueReceive(bc.eventQueue, &evt, EVENT_QUEUE_TIMEOUT_SYSTICK) == pdTRUE) {
             switch (evt.event_type) {
                 case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
                     if (bc.data_set_cb) {

@@ -21,6 +21,7 @@
 #define MAX_SERIAL_MSG_SIZE 30
 
 #define TEST_DURATION_IN_S 180
+#define NO_PACKET_TO_SEND 1000
 
 #define TASK_DELAY_MS 50
 #define TASK_DELAY_SYSTICK pdMS_TO_TICKS(TASK_DELAY_MS)
@@ -32,7 +33,7 @@ typedef enum {
     SENDER_TEST_END_PDU
 } sender_state_machine;
 
-volatile uint32_t counter = 0;
+volatile uint32_t packet_send_counter = 0;
 volatile bool is_first_pdu = true;
 static const char* SENDER_APP_LOG_GROUP = "SENDER APP";
 static char PC_SERIAL_BUFFER[MAX_SERIAL_MSG_SIZE] = {0};
@@ -42,8 +43,8 @@ static atomic_int EndTest = 0;
 static esp_timer_handle_t xTestTimeoutTimer;
 static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
 
-#define ADV_INT_MIN_MS 300
-#define ADV_INT_MAX_MS 310
+#define ADV_INT_MIN_MS 1000
+#define ADV_INT_MAX_MS 1010
 
 #define N_CONST 0.625
 #define MS_TO_N_CONVERTION(MS) ((uint16_t)((MS) / (N_CONST)))
@@ -51,8 +52,8 @@ static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
 #define MAX_BLOCK_TIME_SEMAPHORE_MS 300
 #define MAX_BLOCK_TIME_SEMAPHORE_TICKS pdMS_TO_TICKS(MAX_BLOCK_TIME_SEMAPHORE_MS)
 
-#define TEST_PAYLOAD_BYTES_LEN 16
-#define TEST_ADV_INTERVAL 300
+#define TEST_PAYLOAD_BYTES_LEN 4
+#define TEST_ADV_INTERVAL 1000
 
 static esp_ble_adv_params_t default_ble_adv_params = {
     .adv_int_min        = MS_TO_N_CONVERTION(ADV_INT_MIN_MS),
@@ -189,14 +190,20 @@ void sender_test_start_pdu(int *state)
     start_test_measurment(TEST_SENDER_ROLE);
     test_log_sender_data(TEST_PAYLOAD_BYTES_LEN, TEST_ADV_INTERVAL);
     ESP_LOGI(SENDER_APP_LOG_GROUP, "Changing state to broadcast pdus");
-    esp_timer_start_once(xTestTimeoutTimer, testTimeoutUs);
+    //esp_timer_start_once(xTestTimeoutTimer, testTimeoutUs);
     *state = SENDER_BROADCAST_PDU;
 }
 
 void sender_broadcast_pdu(int *state)
 {
     static const uint32_t TEMP_TASK_DELAY_MS = ADV_INT_MIN_MS;
-    if (((int) atomic_load(&EndTest)) == 1)
+    // if (((int) atomic_load(&EndTest)) == 1)
+    // {
+    //     *state = SENDER_TEST_END_PDU;
+    //     return;
+    // }
+
+    if (packet_send_counter >= NO_PACKET_TO_SEND)
     {
         *state = SENDER_TEST_END_PDU;
         return;
@@ -225,13 +232,13 @@ void sender_test_end_pdu(int *state)
 
 bool encrypt_new_payload()
 {
-    counter++;
+    packet_send_counter++;
     uint8_t payload[MAX_PDU_PAYLOAD_SIZE] = {0};
     esp_fill_random(payload, TEST_PAYLOAD_BYTES_LEN);
     test_log_packet_send(payload, MAX_PDU_PAYLOAD_SIZE, NULL);
     beacon_pdu_data pdu = {0};
     fill_marker_in_pdu(&pdu);
-    int encrypt_status = encrypt_payload(payload, sizeof(counter), &pdu);
+    int encrypt_status = encrypt_payload(payload, MAX_PDU_PAYLOAD_SIZE, &pdu);
     if (encrypt_status != 0)
     {
         ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed to encrypt payload, error code: %d", encrypt_status);

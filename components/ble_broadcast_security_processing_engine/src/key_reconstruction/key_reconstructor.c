@@ -260,4 +260,8 @@ void process_and_store_key_fragment(reconstructor_queue_element * q_element)
         add_fragment_to_key_management(st_reconstructor_control.key_collection, q_element->consumer_mac_address, q_element->key_id, decrypted_key_fragment_buffer, q_element->key_fragment_no);
         ESP_LOGI(REC_LOG_GROUP, "Successfully reconstructed key fragment no: %i", q_element->key_fragment_no);
     }
+    else
+    {
+        test_log_bad_structure_packet(q_element->consumer_mac_address);
+    }
 }
