@@ -3,8 +3,12 @@
 #include "esp_log.h"
 #include <string.h>
 
+#include "esp_gap_ble_api.h"
+#include "beacon_pdu_data.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 
 #define MAX_TEST_CONSUMERS 2
 #define TEST_SEMAPHORE_MAX_BLOCK_TIME_MS 50
@@ -17,7 +21,7 @@ typedef struct {
 } key_reconstruction_info;
 
 typedef struct {
-    uint16_t total_fill;
+    double total_fill;
     uint16_t no_checks;
 } queue_fill_info;
 
@@ -54,9 +58,25 @@ static esp_bd_addr_t zero_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 static TEST_ROLE test_role;
 static esp_bd_addr_t expected_sender_addrr = {0x1c,0x69, 0x20, 0x30, 0xde, 0x82};
 
+#define RECEIVER_TEST_TASK_STACK_SIZE 4096
+static TaskHandle_t xTestPacketsTask;
+static QueueHandle_t xTestPacketsQueue;
+static const uint16_t MAX_RECEIVER_TEST_QUEUE_SIZE = 50;
+typedef struct {
+    uint8_t packet[MAX_PDU_PAYLOAD_SIZE];
+    size_t pdu_payload_size;
+    esp_bd_addr_t mac_addr;
+} test_packet_structure;
+static const TickType_t TEST_QUEUE_WAIT_SYSTICKS = pdMS_TO_TICKS(50);
+
 bool is_pdu_from_expected_sender(esp_bd_addr_t addr)
 {
     return memcmp(addr, expected_sender_addrr, sizeof(esp_bd_addr_t)) == 0 ? true : false;
+}
+
+bool is_queue_empty()
+{
+    return uxQueueMessagesWaiting(xTestPacketsQueue) == 0 ? true : false;
 }
 
 void reset_test_consumers_structure()
@@ -112,7 +132,12 @@ int add_consumer_to_table(esp_bd_addr_t mac_address)
     {
         for (int i = 0; i < MAX_TEST_CONSUMERS; i++)
         {
-            if (memcmp(ble_test_consumers[i].mac_address, zero_mac, sizeof(esp_bd_addr_t)) == 0)
+            if (memcmp(ble_test_consumers[i].mac_address, mac_address, sizeof(esp_bd_addr_t)) == 0)
+            {
+                index = i;
+                break;
+            }
+            else if (memcmp(ble_test_consumers[i].mac_address, zero_mac, sizeof(esp_bd_addr_t)) == 0)
             {
                 memcpy(ble_test_consumers[i].mac_address, mac_address, sizeof(esp_bd_addr_t));
                 index = i;
@@ -138,9 +163,95 @@ void init_test()
     }
 }
 
+void handle_queue_for_sender(test_packet_structure * pdu);
+void handle_queue_for_receiver(test_packet_structure * pdu);
+
+void test_receiver_app_main(void *arg)
+{
+    test_packet_structure queue_element = {};
+    const uint32_t DELAY_TO_NEXT_LOG_SYSTICK = pdMS_TO_TICKS(20);
+    TEST_ROLE role = test_role; 
+    while (1)
+    {
+        if (xQueueReceive(xTestPacketsQueue, &queue_element, TEST_QUEUE_WAIT_SYSTICKS) == pdTRUE)
+        {
+            switch (role)
+            {
+                case TEST_RECEIVER_ROLE:
+                {
+                    handle_queue_for_receiver(&queue_element);
+                }
+                break;
+
+                case TEST_SENDER_ROLE:
+                {
+                    handle_queue_for_sender(&queue_element);
+                }
+                break;
+            }
+
+            vTaskDelay(DELAY_TO_NEXT_LOG_SYSTICK);
+        }
+    }
+}
+
+void handle_queue_for_sender(test_packet_structure * pdu)
+{
+    ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been sent!", ++ble_test_producer.total_packets_send);
+    ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", pdu->packet, pdu->pdu_payload_size, 0);
+}
+
+void handle_queue_for_receiver(test_packet_structure * pdu)
+{
+    int index = -1;
+
+    if ((index = get_consumer_index(pdu->mac_addr)) >= 0)
+    {
+        ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been received!", ++ble_test_consumers[index].total_packets_received);
+        ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from", pdu->mac_addr, sizeof(esp_bd_addr_t), 0);
+        ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", pdu->packet, pdu->pdu_payload_size, 0);
+    }
+    else
+    {
+        if ((index = add_consumer_to_table(pdu->mac_addr)) >= 0)
+        {
+            ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been received!", ++ble_test_consumers[index].total_packets_received);
+            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from", pdu->mac_addr, sizeof(esp_bd_addr_t), 0);
+            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", pdu->packet, pdu->pdu_payload_size, 0);
+        }
+    }
+}
+
+
+void init_task_resources()
+{
+    xTestPacketsQueue = xQueueCreate(MAX_RECEIVER_TEST_QUEUE_SIZE, sizeof(test_packet_structure));
+    if (xTestPacketsQueue == NULL)
+    {
+        ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to initialized test receiver queue");
+        return;
+    }
+
+    int result = xTaskCreate(
+        test_receiver_app_main,
+        "RECEIVER TEST TASK",
+        RECEIVER_TEST_TASK_STACK_SIZE,
+        NULL,
+        14,
+        &xTestPacketsTask
+    );
+
+    if (xTestPacketsTask == NULL || result != pdPASS)
+    {
+        ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to initialized test receiver task");
+        return;
+    }
+}
+
 void start_test_measurment(TEST_ROLE role)
 {
     test_role = role;
+    init_task_resources();
     ESP_LOGI(TEST_ESP_LOG_GROUP, "--------------TEST STARTED------------");
     ESP_LOGI(TEST_ESP_LOG_GROUP, "--------------%s------------", role == TEST_SENDER_ROLE ? "SENDER" : "RECEIVER");
     test_duration_st.test_start_timestamp_ms = esp_timer_get_time() / 1000;
@@ -148,6 +259,11 @@ void start_test_measurment(TEST_ROLE role)
 
 void end_test_measurment()
 {
+    while (is_queue_empty() == false)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
     test_duration_st.test_end_timestamp_ms = esp_timer_get_time() / 1000;
     int test_duration_s = (int)((test_duration_st.test_end_timestamp_ms - test_duration_st.test_start_timestamp_ms) / 1000);
 
@@ -167,8 +283,8 @@ void end_test_measurment()
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "NO BAD STRUCTURE PACKETS: %i", (int) ble_test_consumers[i].no_bad_structure_packets);
                 if (ble_test_consumers[i].deferred_queue.no_checks != 0)
                 {
-                    double avarage_def_q_fill = (ble_test_consumers[i].deferred_queue.total_fill / ble_test_consumers[i].deferred_queue.no_checks) * 100;
-                    ESP_LOGI(TEST_ESP_LOG_GROUP, "DEFFERRED QUEU AVARAGE FILL: %.2f", avarage_def_q_fill);
+                    double avarage_def_q_fill = ((double)((ble_test_consumers[i].deferred_queue.total_fill * 100) / ((double) ble_test_consumers[i].deferred_queue.no_checks)) );
+                    ESP_LOGI(TEST_ESP_LOG_GROUP, "DEFERRED QUEUE AVARAGE FILL WHILE KEY RECONSTRUCTION COMPLETE: %.2f", avarage_def_q_fill);
                 }
             }
         }
@@ -197,25 +313,18 @@ void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_
 {
     if (data == NULL || mac_address == NULL)
     {
-        ESP_LOGI(TEST_ESP_LOG_GROUP, "packet data or addr NULL");
+        ESP_LOGE(TEST_ESP_LOG_GROUP, "Passed PDU Data or Mac Addrr is NULL");
         return;
     }
 
-    int index = -1;
-    if ((index = get_consumer_index(mac_address)) >= 0)
+    test_packet_structure pdu;
+    pdu.pdu_payload_size = data_len;
+    memcpy(pdu.mac_addr, mac_address, sizeof(esp_bd_addr_t));
+    memcpy(pdu.packet, data, data_len);
+    int result = xQueueSend(xTestPacketsQueue, &pdu, TEST_QUEUE_WAIT_SYSTICKS);
+    if (result != pdTRUE)
     {
-        ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been received!", ++ble_test_consumers[index].total_packets_received);
-        ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from", mac_address, sizeof(esp_bd_addr_t), 0);
-        ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", data, data_len, 0);
-    }
-    else
-    {
-        if ((index = add_consumer_to_table(mac_address)) >= 0)
-        {
-            ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been received!", ++ble_test_consumers[index].total_packets_received);
-            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from", mac_address, sizeof(esp_bd_addr_t), 0);
-            ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", data, data_len, 0);
-        }
+        ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to queue data to test log queue");
     }
 }
 
@@ -242,8 +351,20 @@ void test_log_bad_structure_packet(esp_bd_addr_t addr)
 
 void test_log_packet_send(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address)
 {
-    ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been sent!", ++ble_test_producer.total_packets_send);
-    ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", data, data_len, 0);
+    if (data == NULL)
+    {
+        ESP_LOGE(TEST_ESP_LOG_GROUP, "Passed PDU Data or Mac Addrr is NULL");
+        return;
+    }
+
+    test_packet_structure pdu;
+    pdu.pdu_payload_size = data_len;
+    memcpy(pdu.packet, data, data_len);
+    int result = xQueueSend(xTestPacketsQueue, &pdu, TEST_QUEUE_WAIT_SYSTICKS);
+    if (result != pdTRUE)
+    {
+        ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to queue data to test log queue");
+    }
 }
 
 void test_log_key_reconstruction_start(esp_bd_addr_t mac_address, uint16_t key_id)

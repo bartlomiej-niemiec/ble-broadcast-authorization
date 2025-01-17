@@ -133,7 +133,7 @@ void handle_scanning_pdus(int *state, EventBits_t events)
 
 void handle_cleanup_state(int *state)
 {
-    static const uint32_t timeDelayMs = 2000;
+    static const uint32_t timeDelayMs = 10 * 1e3;
     vTaskDelay(pdMS_TO_TICKS(timeDelayMs));
     end_test_measurment();
     *state = RECEIVER_WAIT_FOR_TEST_START_PDU;

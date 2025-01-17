@@ -21,10 +21,6 @@
 #define MAX_SERIAL_MSG_SIZE 30
 
 #define TEST_DURATION_IN_S 180
-#define NO_PACKET_TO_SEND 1000
-
-#define TASK_DELAY_MS 50
-#define TASK_DELAY_SYSTICK pdMS_TO_TICKS(TASK_DELAY_MS)
 
 typedef enum {
     SENDER_WAIT_FOR_START_CMD,
@@ -44,7 +40,10 @@ static esp_timer_handle_t xTestTimeoutTimer;
 static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
 
 #define ADV_INT_MIN_MS 1000
-#define ADV_INT_MAX_MS 1010
+#define ADV_INT_MAX_MS 1050
+
+#define TASK_DELAY_MS ADV_INT_MIN_MS
+#define TASK_DELAY_SYSTICK pdMS_TO_TICKS(TASK_DELAY_MS)
 
 #define N_CONST 0.625
 #define MS_TO_N_CONVERTION(MS) ((uint16_t)((MS) / (N_CONST)))
@@ -52,8 +51,11 @@ static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
 #define MAX_BLOCK_TIME_SEMAPHORE_MS 300
 #define MAX_BLOCK_TIME_SEMAPHORE_TICKS pdMS_TO_TICKS(MAX_BLOCK_TIME_SEMAPHORE_MS)
 
+#define NO_PACKET_TO_SEND 2000
 #define TEST_PAYLOAD_BYTES_LEN 4
-#define TEST_ADV_INTERVAL 1000
+#define TEST_ADV_INTERVAL ADV_INT_MIN_MS
+#define TEST_NO_PACKETS_TO_KEY_REPLACE 200
+
 
 static esp_ble_adv_params_t default_ble_adv_params = {
     .adv_int_min        = MS_TO_N_CONVERTION(ADV_INT_MIN_MS),
@@ -97,6 +99,7 @@ void serial_data_received(uint8_t * data, size_t data_len)
 void app_main(void)
 {
     init_payload_encryption();
+    set_key_replacement_time_in_s( (double) (TEST_ADV_INTERVAL * TEST_NO_PACKETS_TO_KEY_REPLACE * 0.001) );
     bool init_controller = init_broadcast_controller();
 
     xStartCmdReceived = xSemaphoreCreateBinary();
@@ -197,11 +200,6 @@ void sender_test_start_pdu(int *state)
 void sender_broadcast_pdu(int *state)
 {
     static const uint32_t TEMP_TASK_DELAY_MS = ADV_INT_MIN_MS;
-    // if (((int) atomic_load(&EndTest)) == 1)
-    // {
-    //     *state = SENDER_TEST_END_PDU;
-    //     return;
-    // }
 
     if (packet_send_counter >= NO_PACKET_TO_SEND)
     {

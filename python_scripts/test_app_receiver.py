@@ -5,7 +5,7 @@ import csv
 import queue
 
 SERIAL_PORT_CONFIG = {
-    'port': 'COM6',
+    'port': 'COM3',
     'baudrate': 115200,
     'bytesize': serial.EIGHTBITS,
     'stopbits': serial.STOPBITS_ONE,

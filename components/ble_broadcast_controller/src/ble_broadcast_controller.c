@@ -78,29 +78,50 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     // Prepare event structure
     BroadcastEvent evt = { .event_type = event, .payload_size = 0, .payload = {0}, .timestamp = 0 };    
     // // Handle specific event types
-    if (event == ESP_GAP_BLE_SCAN_RESULT_EVT) {
-        // Validate the parameter
-        if (param == NULL) {
-            ESP_LOGE(BROADCAST_LOG_GROUP, "Callback parameter is NULL");
-            return;
-        }
-        esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
-        if (scan_result->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
-            evt.timestamp = esp_timer_get_time();
-            // Safely handle payload size
-            if (scan_result->scan_rst.adv_data_len <= MAX_GAP_DATA_LEN) {
-                evt.payload_size = scan_result->scan_rst.adv_data_len;
-                memcpy(evt.mac_addr, scan_result->scan_rst.bda, sizeof(esp_bd_addr_t));
-                memcpy(evt.payload, scan_result->scan_rst.ble_adv, evt.payload_size);
-            } else {
-                ESP_LOGW(BROADCAST_LOG_GROUP, "Adv data too large: %d bytes", scan_result->scan_rst.adv_data_len);
+    bool isEventSupported = true;
+    switch (event)
+    {
+        case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
+        case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
+        case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
+        case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
+        case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
+            break;
+
+        case ESP_GAP_BLE_SCAN_RESULT_EVT:
+        {
+            // Validate the parameter
+            if (param == NULL) {
+                ESP_LOGE(BROADCAST_LOG_GROUP, "Callback parameter is NULL");
+                return;
+            }
+            esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
+            if (scan_result->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
+                evt.timestamp = esp_timer_get_time();
+                // Safely handle payload size
+                if (scan_result->scan_rst.adv_data_len <= MAX_GAP_DATA_LEN) {
+                    evt.payload_size = scan_result->scan_rst.adv_data_len;
+                    memcpy(evt.mac_addr, scan_result->scan_rst.bda, sizeof(esp_bd_addr_t));
+                    memcpy(evt.payload, scan_result->scan_rst.ble_adv, evt.payload_size);
+                } else {
+                    ESP_LOGW(BROADCAST_LOG_GROUP, "Adv data too large: %d bytes", scan_result->scan_rst.adv_data_len);
+                }
             }
         }
-    }
+        break;
 
-    // Attempt to send event to task queue
-    if (xQueueSend(bc.eventQueue, &evt, EVENT_QUEUE_TIMEOUT_SYSTICK) != pdPASS) {
-        ESP_LOGW(BROADCAST_LOG_GROUP, "Event queue full! Dropping event type: %d", event);
+        default:
+            isEventSupported = false;
+            break;
+
+    };
+
+    if (isEventSupported == true)
+    {
+        // Attempt to send event to task queue
+        if (xQueueSend(bc.eventQueue, &evt, EVENT_QUEUE_TIMEOUT_SYSTICK) != pdPASS) {
+            ESP_LOGW(BROADCAST_LOG_GROUP, "Event queue full! Dropping event type: %d", event);
+        }
     }
 }
 
@@ -197,9 +218,6 @@ static void ble_sender_main(void) {
                     ESP_LOGD(BROADCAST_LOG_GROUP, "Unhandled event type: %d", evt.event_type);
                     break;
             }
-        } else {
-            // Perform periodic maintenance here
-            ESP_LOGI(BROADCAST_LOG_GROUP, "Task is alive, monitoring...");
         }
     }
 }
@@ -302,7 +320,6 @@ void set_broadcasting_payload(uint8_t *payload, size_t payload_size)
         if (payload_size <= MAX_GAP_DATA_LEN)
         {
             esp_ble_gap_config_adv_data_raw(payload, payload_size);
-            ESP_LOGI(BROADCAST_LOG_GROUP, "Set broadcasting payload of size: %i", (int) payload_size);
         } 
         xSemaphoreGive(bc.xMutex);
     }

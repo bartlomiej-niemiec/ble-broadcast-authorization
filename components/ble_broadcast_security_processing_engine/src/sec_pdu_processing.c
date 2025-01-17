@@ -241,9 +241,6 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
 
 int process_deferred_queue(ble_consumer * p_ble_consumer)
 {
-    double queue_percentage = get_queue_elements_in_percentage(p_ble_consumer->context.deferred_queue_count, DEFERRED_QUEUE_SIZE);
-    test_log_deferred_queue_percentage(queue_percentage, p_ble_consumer->mac_address_arr);
-
     beacon_pdu_data pduBatch[MAX_PROCESSED_PDUS_AT_ONCE] = {0};
     int counter = 0;
     while (get_deferred_queue_item(p_ble_consumer, &pduBatch[counter]) == pdTRUE && MAX_PROCESSED_PDUS_AT_ONCE > counter) {
@@ -294,8 +291,6 @@ int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data
         if (pdu != NULL)
         {
             add_to_deferred_queue(p_ble_consumer, pdu);
-            double queue_percentage = get_queue_elements_in_percentage(p_ble_consumer->context.deferred_queue_count, DEFERRED_QUEUE_SIZE);
-            test_log_deferred_queue_percentage(queue_percentage, p_ble_consumer->mac_address_arr);
         }
     }
 
@@ -326,6 +321,9 @@ void key_reconstruction_complete(uint8_t key_id, key_128b * const reconstructed_
                  mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
         return;
     }
+
+    double queue_percentage = get_queue_elements_in_percentage(p_ble_consumer->context.deferred_queue_count, DEFERRED_QUEUE_SIZE);
+    test_log_deferred_queue_percentage(queue_percentage, p_ble_consumer->mac_address_arr);
 
     // Attempt to add the reconstructed key to the cache
     int status = add_key_to_cache(p_ble_consumer->context.key_cache, reconstructed_key, key_id);
@@ -485,7 +483,6 @@ void scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_siz
     {
         if (is_pdu_in_beacon_pdu_format(data, data_size))
         {
-            ESP_LOGI(SEC_PDU_PROC_LOG, "Received PDU of tota len: %i", (int) data_size);
             beacon_pdu_data pdu = {0};
             size_t payload_size = get_payload_size_from_pdu(data_size);
             memcpy(&pdu.marker, data, sizeof(beacon_marker));

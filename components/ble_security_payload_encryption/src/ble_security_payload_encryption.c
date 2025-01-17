@@ -15,7 +15,7 @@
 #include "test.h"
 
 #define KEY_REPLACEMENT_TIMEOUT_S 30
-#define KEY_REPLACEMENT_TIMEOUT_US (KEY_REPLACEMENT_TIMEOUT_S * (1000000))
+#define KEY_REPLACEMENT_TIMEOUT_US(s) ((s) * (1000000))
 
 static const char* MSG_SENDER_LOG_GROUP = "MSG_ENCRYPTOR";
 static key_128b pre_shared_key;
@@ -34,14 +34,16 @@ static esp_timer_create_args_t key_replacement_timer_args = {
     .name = "KEY REPLACEMENT TIMER",
 };
 
+static volatile uint16_t KEY_REPLACE_TIME_IN_S;
+
 void key_replacement_cb(void *arg)
 {
     generate_128b_key(&next_pre_shared_key);
     ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(next_pre_shared_key));
     split_128b_key_to_fragment(&next_pre_shared_key, &next_splitted_pre_shared_key);
     is_key_replace_request_active = true;
-    esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US);
-    test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_S);
+    esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
+    test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
 }
 
 uint16_t get_random_fragment_id()
@@ -57,12 +59,6 @@ uint8_t get_random_time_interval_value()
 uint16_t get_random_key_id()
 {
     return ((esp_random() % (USHRT_MAX - 1)) + 1);
-}
-
-uint16_t get_random_pdus_count_to_incr_key_exchange_counter()
-{
-    const int BASE = 10;
-    return (10 + (esp_random() % 20));
 }
 
 bool init_payload_encryption()
@@ -84,14 +80,20 @@ bool init_payload_encryption()
     return isInitialized;
 }
 
+bool set_key_replacement_time_in_s(const double time_in_s)
+{
+    ESP_LOGI(MSG_SENDER_LOG_GROUP, "KEY REPLACE TIME SET TO: %f", time_in_s);
+    KEY_REPLACE_TIME_IN_S = time_in_s;
+    return true;
+}
 
 int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * encrypted_pdu)
 {
     static bool isTimerFirstStarted = false;
     if (isTimerFirstStarted == false)
     {
-        esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US);
-        test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_S);
+        esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
+        test_log_sender_key_replace_time_in_s(KEY_REPLACE_TIME_IN_S);
         isTimerFirstStarted = true;
     }
 
