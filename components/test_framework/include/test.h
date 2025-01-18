@@ -6,6 +6,10 @@
 
 #define TEST_ESP_LOG_GROUP "TEST_LOG_GROUP"
 
+extern uint8_t test_payload_4_bytes[4];
+extern uint8_t test_payload_10_bytes[10];
+extern uint8_t test_payload_16_bytes[16];
+
 typedef enum {
     TEST_SENDER_ROLE,
     TEST_RECEIVER_ROLE

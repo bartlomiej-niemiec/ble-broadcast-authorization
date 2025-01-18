@@ -14,6 +14,42 @@
 #define TEST_SEMAPHORE_MAX_BLOCK_TIME_MS 50
 #define TEST_SEMAPHORE_MAX_BLOCK_TIME_SYSTICK pdMS_TO_TICKS(TEST_SEMAPHORE_MAX_BLOCK_TIME_MS)
 
+uint8_t test_payload_4_bytes[4] = {0xb2, 0xaf, 0xc5, 0x6c};
+uint8_t test_payload_10_bytes[10] = {0x74, 0x5d, 0xa3, 0x45, 0xa1, 0x1b, 0x0e, 0x02, 0x2a, 0x7f};
+uint8_t test_payload_16_bytes[16] = {0x54, 0xeb, 0xca, 0x9d, 0x05, 0xff, 0x40, 0x49, 0x17, 0xa0, 0x3a, 0xd8, 0x77, 0x62, 0xed, 0xe2};
+
+bool is_data_decoded_valid(uint8_t * data, size_t data_size)
+{
+    bool is_data_decoded_valid = false;
+    switch (data_size)
+    {
+
+        case 4:
+        {
+            is_data_decoded_valid = memcmp(data, test_payload_4_bytes, data_size) == 0 ? true : false;
+        }   
+        break;
+
+        case 10:
+        {
+            is_data_decoded_valid = memcmp(data, test_payload_10_bytes, data_size) == 0 ? true : false;
+        }   
+        break;
+
+        case 16:
+        {
+            is_data_decoded_valid = memcmp(data, test_payload_16_bytes, data_size) == 0 ? true : false;
+        }   
+        break;
+
+        default:
+            break;
+
+    };
+
+    return is_data_decoded_valid;
+}
+
 typedef struct {
     uint16_t key_id;
     uint64_t key_reconstruction_start_ms;
@@ -34,6 +70,7 @@ typedef struct {
     key_reconstruction_info key_rec_data;
     queue_fill_info deferred_queue;
     uint32_t no_bad_structure_packets;
+    uint32_t wrongly_decoded_data_packets;
 } test_consumer;
 
 typedef struct {
@@ -58,7 +95,7 @@ static esp_bd_addr_t zero_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 static TEST_ROLE test_role;
 static esp_bd_addr_t expected_sender_addrr = {0x1c,0x69, 0x20, 0x30, 0xde, 0x82};
 
-#define RECEIVER_TEST_TASK_STACK_SIZE 4096
+#define RECEIVER_TEST_TASK_STACK_SIZE 6000
 static TaskHandle_t xTestPacketsTask;
 static QueueHandle_t xTestPacketsQueue;
 static const uint16_t MAX_RECEIVER_TEST_QUEUE_SIZE = 50;
@@ -91,6 +128,7 @@ void reset_test_consumers_structure()
         ble_test_consumers[i].avarage_key_reconstruction_time = 0;
         ble_test_consumers[i].no_reconstructed_keys = 0;
         ble_test_consumers[i].no_bad_structure_packets = 0;
+        ble_test_consumers[i].wrongly_decoded_data_packets = 0;
         ble_test_consumers[i].key_rec_data.key_id = 0;
         ble_test_consumers[i].key_rec_data.key_reconstruction_start_ms = 0;
         ble_test_consumers[i].key_rec_data.key_reconstruction_end_ms = 0;
@@ -210,6 +248,11 @@ void handle_queue_for_receiver(test_packet_structure * pdu)
         ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been received!", ++ble_test_consumers[index].total_packets_received);
         ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from", pdu->mac_addr, sizeof(esp_bd_addr_t), 0);
         ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", pdu->packet, pdu->pdu_payload_size, 0);
+        if (is_data_decoded_valid(pdu->packet, pdu->pdu_payload_size) == false)
+        {
+            ESP_LOGE(TEST_ESP_LOG_GROUP, "Packet payload is wrong after decoding!");
+            ble_test_consumers[index].wrongly_decoded_data_packets++;
+        }
     }
     else
     {
@@ -218,6 +261,11 @@ void handle_queue_for_receiver(test_packet_structure * pdu)
             ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet %lu has been received!", ++ble_test_consumers[index].total_packets_received);
             ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet received from", pdu->mac_addr, sizeof(esp_bd_addr_t), 0);
             ESP_LOG_BUFFER_HEXDUMP("TEST_LOG_GROUP: Packet payload", pdu->packet, pdu->pdu_payload_size, 0);
+            if (is_data_decoded_valid(pdu->packet, pdu->pdu_payload_size) == false)
+            {
+                ESP_LOGE(TEST_ESP_LOG_GROUP, "Packet payload is wrong after decoding!");
+                ble_test_consumers[index].wrongly_decoded_data_packets++;
+            }
         }
     }
 }
@@ -281,6 +329,7 @@ void end_test_measurment()
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "AVARAGE KEY RECONSTRUCTION TIME IN S: %.2f", (double) (ble_test_consumers[i].avarage_key_reconstruction_time / 1000));
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "NO KEY RECONSTRUCTED: %i", (int) ble_test_consumers[i].no_reconstructed_keys);
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "NO BAD STRUCTURE PACKETS: %i", (int) ble_test_consumers[i].no_bad_structure_packets);
+                ESP_LOGI(TEST_ESP_LOG_GROUP, "WRONGLY DECODED PACKETS: %i", (int) ble_test_consumers[i].wrongly_decoded_data_packets);
                 if (ble_test_consumers[i].deferred_queue.no_checks != 0)
                 {
                     double avarage_def_q_fill = ((double)((ble_test_consumers[i].deferred_queue.total_fill * 100) / ((double) ble_test_consumers[i].deferred_queue.no_checks)) );

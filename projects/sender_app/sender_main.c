@@ -38,9 +38,29 @@ static SemaphoreHandle_t xStartCmdReceived;
 static atomic_int EndTest = 0;
 static esp_timer_handle_t xTestTimeoutTimer;
 static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
+static uint8_t *test_payload_buffer_ptr = NULL;
 
-#define ADV_INT_MIN_MS 1000
-#define ADV_INT_MAX_MS 1050
+typedef enum {
+    PAYLOAD_4_BYTES = 4,
+    PAYLOAD_10_BYTES = 10,
+    PAYLOAD_16_BYTES = 16
+} TEST_PAYLOAD_SIZES;
+
+typedef enum {
+    INT_50MS = 50,
+    INT_100MS = 100,
+    INT_300MS = 300,
+    INT_500MS = 500,
+    INT_1000MS = 1000,
+} TEST_ADVERTISING_INTERVALS;
+
+#define ADV_INT_PLUS_10(x) (int)((x) + (((double)(x)) * (0.1)))
+
+#define TEST_PAYLOAD_BYTES_LEN PAYLOAD_10_BYTES
+#define TEST_ADV_INTERVAL INT_1000MS
+
+#define ADV_INT_MIN_MS TEST_ADV_INTERVAL
+#define ADV_INT_MAX_MS ADV_INT_PLUS_10(TEST_ADV_INTERVAL)
 
 #define TASK_DELAY_MS ADV_INT_MIN_MS
 #define TASK_DELAY_SYSTICK pdMS_TO_TICKS(TASK_DELAY_MS)
@@ -52,8 +72,6 @@ static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
 #define MAX_BLOCK_TIME_SEMAPHORE_TICKS pdMS_TO_TICKS(MAX_BLOCK_TIME_SEMAPHORE_MS)
 
 #define NO_PACKET_TO_SEND 2000
-#define TEST_PAYLOAD_BYTES_LEN 4
-#define TEST_ADV_INTERVAL ADV_INT_MIN_MS
 #define TEST_NO_PACKETS_TO_KEY_REPLACE 200
 
 
@@ -72,7 +90,7 @@ void test_timeout_callback(void *arg)
 }
 static esp_timer_create_args_t testTimeoutTimer = {
   .callback = test_timeout_callback,
-  .arg = NULL,
+  .arg = NULL, 
   .name = "TEST_TIMEOUT_TIMER",  
 };
 
@@ -96,11 +114,50 @@ void serial_data_received(uint8_t * data, size_t data_len)
     }
 }
 
+uint8_t * get_test_payload_buffer(size_t data_len)
+{
+    uint8_t * payload_buffer_ptr = NULL;
+    switch (data_len)
+    {
+        case PAYLOAD_4_BYTES:
+        {
+            payload_buffer_ptr = test_payload_4_bytes;
+        }
+        break;
+
+        case PAYLOAD_10_BYTES:
+        {
+            payload_buffer_ptr = test_payload_10_bytes;
+        }
+        break;
+
+        case PAYLOAD_16_BYTES:
+        {
+            payload_buffer_ptr = test_payload_16_bytes;
+        }   
+        break;
+
+        default:
+            break;
+    };
+
+
+    return payload_buffer_ptr;
+}
+
 void app_main(void)
 {
     init_payload_encryption();
     set_key_replacement_time_in_s( (double) (TEST_ADV_INTERVAL * TEST_NO_PACKETS_TO_KEY_REPLACE * 0.001) );
     bool init_controller = init_broadcast_controller();
+
+    //ASSIGN PAYLOAD BUFFER
+    test_payload_buffer_ptr = get_test_payload_buffer(TEST_PAYLOAD_BYTES_LEN);
+    if (test_payload_buffer_ptr == NULL)
+    {
+        ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed acquire test payload buffer!");
+        return;
+    }
 
     xStartCmdReceived = xSemaphoreCreateBinary();
     if (xStartCmdReceived == NULL)
@@ -231,12 +288,12 @@ void sender_test_end_pdu(int *state)
 bool encrypt_new_payload()
 {
     packet_send_counter++;
-    uint8_t payload[MAX_PDU_PAYLOAD_SIZE] = {0};
-    esp_fill_random(payload, TEST_PAYLOAD_BYTES_LEN);
-    test_log_packet_send(payload, MAX_PDU_PAYLOAD_SIZE, NULL);
+    uint8_t payload[TEST_PAYLOAD_BYTES_LEN] = {0};
+    // esp_fill_random(payload, TEST_PAYLOAD_BYTES_LEN);
+    memcpy(payload, test_payload_buffer_ptr, TEST_PAYLOAD_BYTES_LEN);
     beacon_pdu_data pdu = {0};
     fill_marker_in_pdu(&pdu);
-    int encrypt_status = encrypt_payload(payload, MAX_PDU_PAYLOAD_SIZE, &pdu);
+    int encrypt_status = encrypt_payload(payload, TEST_PAYLOAD_BYTES_LEN, &pdu);
     if (encrypt_status != 0)
     {
         ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed to encrypt payload, error code: %d", encrypt_status);
@@ -244,5 +301,6 @@ bool encrypt_new_payload()
     }
             
     set_broadcasting_payload((uint8_t *)&pdu, get_beacon_pdu_data_len(&pdu));
+    test_log_packet_send(pdu.payload, pdu.payload_size, NULL);
     return true;
 }

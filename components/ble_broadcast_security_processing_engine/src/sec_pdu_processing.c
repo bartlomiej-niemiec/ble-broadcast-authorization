@@ -487,7 +487,7 @@ void scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_siz
             size_t payload_size = get_payload_size_from_pdu(data_size);
             memcpy(&pdu.marker, data, sizeof(beacon_marker));
             memcpy(&pdu.bcd, &data[sizeof(beacon_marker)], sizeof(beacon_crypto_data));
-            memcpy(&pdu.payload, &data[sizeof(beacon_marker) + sizeof(beacon_crypto_data)], payload_size);
+            memcpy(pdu.payload, &data[sizeof(beacon_marker) + sizeof(beacon_crypto_data)], payload_size);
             pdu.payload_size = payload_size;
             enqueue_pdu_for_processing(&pdu, mac_address);
         }

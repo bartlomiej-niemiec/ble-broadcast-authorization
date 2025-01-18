@@ -5,7 +5,7 @@ import csv
 import queue
 
 SERIAL_PORT_CONFIG = {
-    'port': 'COM7',
+    'port': 'COM3',
     'baudrate': 115200,
     'bytesize': serial.EIGHTBITS,
     'stopbits': serial.STOPBITS_ONE,
@@ -14,7 +14,9 @@ SERIAL_PORT_CONFIG = {
 
 FILENAME = "test_sender"
 TIMESTR = time.strftime("%Y%m%d_%H%M%S")
-LOGFILEPATH = FILENAME + "_" + TIMESTR + ".txt"
+PAYLOAD_SIZE = "4"
+INTERVAL = "1000"
+LOGFILEPATH = FILENAME + "_" + TIMESTR + "_" + PAYLOAD_SIZE + "_" + INTERVAL + "ms" + ".txt"
 
 MAX_Q_SIZE = 20
 START_TIME_DELAY = 3
@@ -135,7 +137,7 @@ if __name__ == "__main__":
                     data = queue.get()
                     print(data)
                     if TEST_END_MSG is data:
-                        break
+                        exit()
                     data += '\r\n'
                     csvfile.write(data)
 
