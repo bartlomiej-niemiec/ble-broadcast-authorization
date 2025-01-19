@@ -40,24 +40,10 @@ static esp_timer_handle_t xTestTimeoutTimer;
 static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
 static uint8_t *test_payload_buffer_ptr = NULL;
 
-typedef enum {
-    PAYLOAD_4_BYTES = 4,
-    PAYLOAD_10_BYTES = 10,
-    PAYLOAD_16_BYTES = 16
-} TEST_PAYLOAD_SIZES;
-
-typedef enum {
-    INT_50MS = 50,
-    INT_100MS = 100,
-    INT_300MS = 300,
-    INT_500MS = 500,
-    INT_1000MS = 1000,
-} TEST_ADVERTISING_INTERVALS;
-
 #define ADV_INT_PLUS_10(x) (int)((x) + (((double)(x)) * (0.1)))
 
-#define TEST_PAYLOAD_BYTES_LEN PAYLOAD_10_BYTES
-#define TEST_ADV_INTERVAL INT_1000MS
+#define TEST_PAYLOAD_BYTES_LEN PAYLOAD_16_BYTES
+#define TEST_ADV_INTERVAL INT_20MS
 
 #define ADV_INT_MIN_MS TEST_ADV_INTERVAL
 #define ADV_INT_MAX_MS ADV_INT_PLUS_10(TEST_ADV_INTERVAL)
@@ -244,8 +230,16 @@ void sender_test_start_pdu(int *state)
     {
         set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_test_pdu));
     }
+    
     start_broadcasting(&default_ble_adv_params);
-    vTaskDelay(pdMS_TO_TICKS(ADV_INT_MAX_MS * 10));
+    if (TEST_ADV_INTERVAL == INT_20MS)
+    {
+        vTaskDelay(TEST_ADV_INTERVAL * 30);
+    }
+    else
+    {
+        vTaskDelay(TEST_ADV_INTERVAL * 10);
+    }
     init_test();
     start_test_measurment(TEST_SENDER_ROLE);
     test_log_sender_data(TEST_PAYLOAD_BYTES_LEN, TEST_ADV_INTERVAL);
@@ -281,7 +275,14 @@ void sender_test_end_pdu(int *state)
     {
         set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_test_pdu));
     }
-    vTaskDelay(pdMS_TO_TICKS(ADV_INT_MAX_MS * 10));
+    if (TEST_ADV_INTERVAL == INT_20MS)
+    {
+        vTaskDelay(TEST_ADV_INTERVAL * 30);
+    }
+    else
+    {
+        vTaskDelay(TEST_ADV_INTERVAL * 10);
+    }
     end_test_measurment();
 }
 

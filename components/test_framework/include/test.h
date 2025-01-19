@@ -15,6 +15,23 @@ typedef enum {
     TEST_RECEIVER_ROLE
 } TEST_ROLE;
 
+typedef enum {
+    PAYLOAD_4_BYTES = 4,
+    PAYLOAD_10_BYTES = 10,
+    PAYLOAD_16_BYTES = 16
+} TEST_PAYLOAD_SIZES;
+
+typedef enum {
+    INT_20MS = 20,
+    INT_50MS = 50,
+    INT_100MS = 100,
+    INT_300MS = 300,
+    INT_500MS = 500,
+    INT_1000MS = 1000,
+    INT_2000MS = 2000
+} TEST_ADVERTISING_INTERVALS;
+
+
 void init_test();
 
 void start_test_measurment(TEST_ROLE role);

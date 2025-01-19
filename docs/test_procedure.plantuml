@@ -1,0 +1,17 @@
+@startuml
+participant Sender
+participant Receiver
+participant PC
+
+PC -> Sender: Start test msg via serial
+Sender -> Sender: Init resources
+Sender -> Receiver: Broadcast test start msg
+Receiver -> Receiver: Init resources
+Sender -> Sender: Wait 2-3 seconds
+Sender -> Receiver: Start broadcasting
+Sender -> Sender: Send 2000 PDUs
+Sender -> Receiver: Broadcast test end msg
+Sender -> PC: Log test results
+Receiver -> PC: Log test results
+
+@enduml

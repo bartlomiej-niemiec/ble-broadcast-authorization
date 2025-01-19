@@ -18,38 +18,6 @@ uint8_t test_payload_4_bytes[4] = {0xb2, 0xaf, 0xc5, 0x6c};
 uint8_t test_payload_10_bytes[10] = {0x74, 0x5d, 0xa3, 0x45, 0xa1, 0x1b, 0x0e, 0x02, 0x2a, 0x7f};
 uint8_t test_payload_16_bytes[16] = {0x54, 0xeb, 0xca, 0x9d, 0x05, 0xff, 0x40, 0x49, 0x17, 0xa0, 0x3a, 0xd8, 0x77, 0x62, 0xed, 0xe2};
 
-bool is_data_decoded_valid(uint8_t * data, size_t data_size)
-{
-    bool is_data_decoded_valid = false;
-    switch (data_size)
-    {
-
-        case 4:
-        {
-            is_data_decoded_valid = memcmp(data, test_payload_4_bytes, data_size) == 0 ? true : false;
-        }   
-        break;
-
-        case 10:
-        {
-            is_data_decoded_valid = memcmp(data, test_payload_10_bytes, data_size) == 0 ? true : false;
-        }   
-        break;
-
-        case 16:
-        {
-            is_data_decoded_valid = memcmp(data, test_payload_16_bytes, data_size) == 0 ? true : false;
-        }   
-        break;
-
-        default:
-            break;
-
-    };
-
-    return is_data_decoded_valid;
-}
-
 typedef struct {
     uint16_t key_id;
     uint64_t key_reconstruction_start_ms;
@@ -97,14 +65,47 @@ static esp_bd_addr_t expected_sender_addrr = {0x1c,0x69, 0x20, 0x30, 0xde, 0x82}
 
 #define RECEIVER_TEST_TASK_STACK_SIZE 6000
 static TaskHandle_t xTestPacketsTask;
-static QueueHandle_t xTestPacketsQueue;
-static const uint16_t MAX_RECEIVER_TEST_QUEUE_SIZE = 50;
+static volatile QueueHandle_t xTestPacketsQueue;
+static const uint16_t MAX_RECEIVER_TEST_QUEUE_SIZE = 70;
 typedef struct {
     uint8_t packet[MAX_PDU_PAYLOAD_SIZE];
     size_t pdu_payload_size;
     esp_bd_addr_t mac_addr;
 } test_packet_structure;
 static const TickType_t TEST_QUEUE_WAIT_SYSTICKS = pdMS_TO_TICKS(50);
+
+
+bool is_data_decoded_valid(uint8_t * data, size_t data_size)
+{
+    bool is_data_decoded_valid = false;
+    switch (data_size)
+    {
+
+        case PAYLOAD_4_BYTES:
+        {
+            is_data_decoded_valid = memcmp(data, test_payload_4_bytes, data_size) == 0 ? true : false;
+        }   
+        break;
+
+        case PAYLOAD_10_BYTES:
+        {
+            is_data_decoded_valid = memcmp(data, test_payload_10_bytes, data_size) == 0 ? true : false;
+        }   
+        break;
+
+        case PAYLOAD_16_BYTES:
+        {
+            is_data_decoded_valid = memcmp(data, test_payload_16_bytes, data_size) == 0 ? true : false;
+        }   
+        break;
+
+        default:
+            break;
+
+    };
+
+    return is_data_decoded_valid;
+}
 
 bool is_pdu_from_expected_sender(esp_bd_addr_t addr)
 {
@@ -370,10 +371,13 @@ void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_
     pdu.pdu_payload_size = data_len;
     memcpy(pdu.mac_addr, mac_address, sizeof(esp_bd_addr_t));
     memcpy(pdu.packet, data, data_len);
-    int result = xQueueSend(xTestPacketsQueue, &pdu, TEST_QUEUE_WAIT_SYSTICKS);
-    if (result != pdTRUE)
+    if (xTestPacketsQueue != NULL)
     {
-        ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to queue data to test log queue");
+        int result = xQueueSend(xTestPacketsQueue, &pdu, TEST_QUEUE_WAIT_SYSTICKS);
+        if (result != pdTRUE)
+        {
+            ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to queue data to test log queue");
+        }
     }
 }
 

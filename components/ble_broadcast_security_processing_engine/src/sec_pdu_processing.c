@@ -121,8 +121,6 @@ void sec_processing_main(void *arg)
                                                  EVENT_NEW_PDU | EVENT_PROCESS_DEFFERRED_PDUS,
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
 
-        log_processing_queue_size();
-
         if (events & EVENT_NEW_PDU) {
             handle_event_new_pdu();
         }

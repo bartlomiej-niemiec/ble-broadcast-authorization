@@ -1,0 +1,22 @@
+@startuml
+
+"Set broadcast data" <-- [BLE Broadcast Controller]
+"Encrypt Payload" <-- [Crypto]
+
+"Log" <-- [TestResults]
+
+package "Sec Encryption Engine" {
+    component [Key Switch]
+    component [Encryptor]
+    [Key Switch] -> [Encryptor]
+    [Key Switch] <- [Encryptor]
+    [Encryptor] ..> "Encrypt Payload" : use
+    "Encrypt PDU" <--[Encryptor]
+}
+
+component [SenderMain]
+[SenderMain] ..> "Set broadcast data" : use
+[SenderMain] ..> "Encrypt PDU" : use
+[SenderMain] ..> "Log" : use
+
+@enduml

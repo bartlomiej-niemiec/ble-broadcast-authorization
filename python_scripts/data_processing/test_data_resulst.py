@@ -29,6 +29,15 @@ class DataCollection:
 
 TEST_DATA_4_BYTES = [
     TestData(
+            sender_advertising_interval_ms=20,
+            sender_total_pdus_send=2000,
+            sender_payload_size=4,
+            packets_received=802,
+            packets_malformed=0,
+            average_kr_tim_in_s=0.36,
+            average_dq_fill_for_kr=31.00
+        ),
+    TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
         sender_payload_size=4,
@@ -77,6 +86,15 @@ TEST_DATA_4_BYTES = [
 
 TEST_DATA_10_BYTES = [
     TestData(
+            sender_advertising_interval_ms=20,
+            sender_total_pdus_send=2000,
+            sender_payload_size=4,
+            packets_received=818,
+            packets_malformed=0,
+            average_kr_tim_in_s=0.29,
+            average_dq_fill_for_kr=28.18
+        ),
+    TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
@@ -116,14 +134,23 @@ TEST_DATA_10_BYTES = [
         sender_advertising_interval_ms=1000,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
-        packets_received=1834,
+        packets_received=1732,
         packets_malformed=0,
-        average_kr_tim_in_s=6.53,
-        average_dq_fill_for_kr=23.00
+        average_kr_tim_in_s=8.06,
+        average_dq_fill_for_kr=26.67
     )
 ]
 
 TEST_DATA_16_BYTES = [
+    TestData(
+            sender_advertising_interval_ms=20,
+            sender_total_pdus_send=2000,
+            sender_payload_size=4,
+            packets_received=834,
+            packets_malformed=0,
+            average_kr_tim_in_s=0.47,
+            average_dq_fill_for_kr=38.18
+        ),
     TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
@@ -164,9 +191,9 @@ TEST_DATA_16_BYTES = [
         sender_advertising_interval_ms=1000,
         sender_total_pdus_send=2000,
         sender_payload_size=16,
-        packets_received=1698,
+        packets_received=1733,
         packets_malformed=0,
-        average_kr_tim_in_s=9.42,
-        average_dq_fill_for_kr=29.00
+        average_kr_tim_in_s=7.85,
+        average_dq_fill_for_kr=24.67
     )
 ]

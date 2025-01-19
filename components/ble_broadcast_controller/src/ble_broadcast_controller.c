@@ -13,7 +13,7 @@
 #include "freertos/semphr.h"
 #include <string.h>
 
-#define EVENT_QUEUE_SIZE 30
+#define EVENT_QUEUE_SIZE 50
 #define MINUS_INTERVAL_TOLERANCE_MS 10
 #define PLUS_INTERVAL_TOLERANCE_MS 10
 
@@ -32,7 +32,7 @@
 
 #define MAX_SCAN_COMPLETE_CB 2
 
-#define EVENT_QUEUE_TIMEOUT_MS 20
+#define EVENT_QUEUE_TIMEOUT_MS 10
 #define EVENT_QUEUE_TIMEOUT_SYSTICK pdMS_TO_TICKS(EVENT_QUEUE_TIMEOUT_MS)
 
 static const char* BROADCAST_TASK_NAME = "BROADCAST TASK";
@@ -165,12 +165,20 @@ static esp_err_t init_resources()
 
 
 static void ble_sender_main(void) {
-    BroadcastEvent evt;
-
+    const int MAX_PROCESSED_PDUS_AT_ONCE = 30;
+    BroadcastEvent evt[30] = {};
     while (1) {
+        int batchCount = 0;
+        while (batchCount < MAX_PROCESSED_PDUS_AT_ONCE &&
+            xQueueReceive(bc.eventQueue, &evt, EVENT_QUEUE_TIMEOUT_SYSTICK) == pdTRUE)
+        {
+            batchCount++;
+        }
+
+        for (int i = 0; i < batchCount; i++)
+        {
         // Receive events with a timeout for periodic maintenance
-        if (xQueueReceive(bc.eventQueue, &evt, EVENT_QUEUE_TIMEOUT_SYSTICK) == pdTRUE) {
-            switch (evt.event_type) {
+            switch (evt[i].event_type) {
                 case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
                     if (bc.data_set_cb) {
                         bc.data_set_cb();
@@ -205,9 +213,9 @@ static void ble_sender_main(void) {
                     {
                         if (bc.scan_complete_cb_observers > 0)
                         {
-                            for (int i = 0; i < bc.scan_complete_cb_observers; i++)
+                            for (int j = 0; j < bc.scan_complete_cb_observers; j++)
                             {
-                                bc.scan_complete_cb[i](evt.timestamp, evt.payload, evt.payload_size, evt.mac_addr);
+                                bc.scan_complete_cb[j](evt[i].timestamp, evt[i].payload, evt[i].payload_size, evt[i].mac_addr);
                             }
                         }
                         xSemaphoreGive(bc.xMutex);
@@ -215,10 +223,11 @@ static void ble_sender_main(void) {
                     break;
 
                 default:
-                    ESP_LOGD(BROADCAST_LOG_GROUP, "Unhandled event type: %d", evt.event_type);
+                    ESP_LOGD(BROADCAST_LOG_GROUP, "Unhandled event type: %d", evt[i].event_type);
                     break;
             }
         }
+        vTaskDelay(EVENT_QUEUE_TIMEOUT_SYSTICK);
     }
 }
 
