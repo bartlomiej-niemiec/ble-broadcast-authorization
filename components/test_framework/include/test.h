@@ -18,7 +18,8 @@ typedef enum {
 typedef enum {
     PAYLOAD_4_BYTES = 4,
     PAYLOAD_10_BYTES = 10,
-    PAYLOAD_16_BYTES = 16
+    PAYLOAD_16_BYTES = 16,
+    RANDOM_SIZE = 100
 } TEST_PAYLOAD_SIZES;
 
 typedef enum {
@@ -27,8 +28,9 @@ typedef enum {
     INT_100MS = 100,
     INT_300MS = 300,
     INT_500MS = 500,
+    INT_RANDOM = 550,
     INT_1000MS = 1000,
-    INT_2000MS = 2000
+    INT_2000MS = 2000,
 } TEST_ADVERTISING_INTERVALS;
 
 

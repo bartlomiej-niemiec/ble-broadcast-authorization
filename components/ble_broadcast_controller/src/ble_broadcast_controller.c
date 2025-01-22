@@ -181,16 +181,15 @@ static esp_err_t init_resources()
 static void ble_sender_main(void) {
     while (1) {
 
-        // Wait for events: either a new PDU or key reconstruction completion
         EventBits_t events = xEventGroupWaitBits(bc.eventGroup,
                                                  BLE_ADV_DATA_RAW_SET_COMPLETE_EVT |
                                                  BLE_ADV_START_COMPLETE_EVT |
-                                                 ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT |
-                                                 ESP_GAP_BLE_SCAN_START_COMPLETE_EVT |
-                                                 ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT,
+                                                 BLE_ADV_STOP_COMPLETE_EVT |
+                                                 BLE_SCAN_START_COMPLETE_EVT |
+                                                 BLE_SCAN_STOP_COMPLETE_EVT,
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
 
-        // Receive events with a timeout for periodic maintenance
+       
             if (events & BLE_ADV_DATA_RAW_SET_COMPLETE_EVT)
             {
                 if (bc.data_set_cb) {
@@ -204,22 +203,24 @@ static void ble_sender_main(void) {
                 if (bc.state_change_cb) {
                     bc.state_change_cb(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
                 }
+                ESP_LOGI(BROADCAST_LOG_GROUP, "Broadcast started!");
             }
 
-            if (events & ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT)
+            if (events & BLE_ADV_STOP_COMPLETE_EVT)
             {
                 set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING);
                 if (bc.state_change_cb) {
                     bc.state_change_cb(BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING);
                 }
+                ESP_LOGI(BROADCAST_LOG_GROUP, "Broadcast stopped!");
             }
 
-            if (events & ESP_GAP_BLE_SCAN_START_COMPLETE_EVT)
+            if (events & BLE_SCAN_START_COMPLETE_EVT)
             {
                 set_scanner_state(SCANNER_CONTROLLER_SCANNING_ACTIVE);
             }
 
-            if (events & ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT)
+            if (events & BLE_SCAN_STOP_COMPLETE_EVT)
             {
                 set_scanner_state(SCANNER_CONTROLLER_SCANNING_NOT_ACTIVE);
             }
@@ -351,7 +352,6 @@ void start_broadcasting(esp_ble_adv_params_t * ble_adv_params) {
             ESP_LOGE(BROADCAST_LOG_GROUP, "Error while setting tx power!");
         }
         esp_ble_gap_start_advertising(ble_adv_params);
-        set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
     }
 }
 

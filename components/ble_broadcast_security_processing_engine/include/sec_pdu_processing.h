@@ -8,7 +8,7 @@
 #include <stddef.h>
 
 #define MAX_OBSERVERS 2
-#define MAX_BLE_CONSUMERS 5
+#define MAX_BLE_CONSUMERS 2
 
 typedef struct{
     uint8_t data[MAX_GAP_DATA_LEN];

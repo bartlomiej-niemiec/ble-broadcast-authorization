@@ -64,7 +64,10 @@ static test_producer ble_test_producer = {};
 static test_duration test_duration_st = {0};
 static esp_bd_addr_t zero_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 static TEST_ROLE test_role;
-static esp_bd_addr_t expected_sender_addrr = {0x1c,0x69, 0x20, 0x30, 0xde, 0x82};
+static esp_bd_addr_t expected_sender_addrr[2] = {
+    {0x1c,0x69, 0x20, 0x30, 0xde, 0x82},
+    {0xd8, 0x3b, 0xda, 0xa0, 0xd1, 0x82}
+};
 
 static TaskHandle_t xTestPacketsTask;
 static volatile QueueHandle_t xTestPacketsQueue;
@@ -111,7 +114,16 @@ bool is_data_decoded_valid(uint8_t * data, size_t data_size)
 
 bool is_pdu_from_expected_sender(esp_bd_addr_t addr)
 {
-    return memcmp(addr, expected_sender_addrr, sizeof(esp_bd_addr_t)) == 0 ? true : false;
+    bool result = false;
+    for (int i = 0; i < 2; i++)
+    {
+        result = memcmp(addr, expected_sender_addrr[i], sizeof(esp_bd_addr_t)) == 0 ? true : false;
+        if (result == true)
+        {
+            break;
+        }
+    }
+    return result;
 }
 
 bool is_queue_empty()

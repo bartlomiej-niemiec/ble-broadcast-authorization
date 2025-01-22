@@ -9,7 +9,7 @@
 #include "beacon_pdu_data.h"
 
 #define DEFERRED_QUEUE_SIZE 80
-#define KEY_CACHE_SIZE 2
+#define KEY_CACHE_SIZE 5
 
 typedef struct {
     QueueHandle_t deferredQueue;

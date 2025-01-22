@@ -1,0 +1,29 @@
+@startuml
+participant "Sender A"
+participant "Sender B"
+participant Receiver
+participant PC
+
+Receiver -> Receiver : Power Up
+"Sender B" -> "Sender B" : Power Up
+"Sender A" -> "Sender A" : Power Up
+"Sender B" -> "Sender B": Init resources
+"Sender B" -> "Sender B": Wait 2-3 seconds
+"Sender B" -> Receiver: Broadcast test start msg
+Receiver -> Receiver: Init resources
+PC -> "Sender A": Start test msg via serial
+"Sender B" -> Receiver: Start broadcasting
+"Sender B" -> Receiver: Send 2000 PDUs
+"Sender A" -> "Sender A": Init resources
+"Sender A" -> Receiver: Broadcast test start msg
+"Sender A" -> "Sender A": Wait 2-3 seconds
+"Sender A" -> Receiver: Start broadcasting
+"Sender A" -> Receiver: Send 2000 PDUs
+"Sender B" -> Receiver: Broadcast test end msg
+Receiver -> Receiver: Wait for test end msg from 2nd Sender
+"Sender A" -> Receiver: Broadcast test end msg
+Receiver -> Receiver: End Test
+Receiver -> PC: Log test results
+"Sender A" -> PC: Log test results
+
+@enduml

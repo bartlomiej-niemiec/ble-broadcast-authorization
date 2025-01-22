@@ -17,6 +17,10 @@
 #define KEY_REPLACEMENT_TIMEOUT_S 30
 #define KEY_REPLACEMENT_TIMEOUT_US(s) ((s) * (1000000))
 
+#define START_MS 3000
+#define BASE_SCALER_MS 250
+#define MAX_TIME_INTEVAL 5000
+
 static const char* MSG_SENDER_LOG_GROUP = "MSG_ENCRYPTOR";
 static key_128b pre_shared_key;
 static key_splitted splitted_pre_shared_key;
@@ -27,16 +31,28 @@ static uint16_t key_id;
 static uint8_t key_time_interval_multiplier;
 static uint8_t encrypt_payload_arr[MAX_PDU_PAYLOAD_SIZE] = {0};
 static  esp_timer_handle_t key_replacement_timer;
-void key_replacement_cb(void *arg);
-static esp_timer_create_args_t key_replacement_timer_args = {
-    .callback = key_replacement_cb,
-    .arg = NULL,
-    .name = "KEY REPLACEMENT TIMER",
-};
+void key_replacement_cb();
+// static esp_timer_create_args_t key_replacement_timer_args = {
+//     .callback = key_replacement_cb,
+//     .arg = NULL,
+//     .name = "KEY REPLACEMENT TIMER",
+// };
 
 static volatile uint16_t KEY_REPLACE_TIME_IN_S;
+static uint32_t key_replacement_packet_counter = 200;
 
-void key_replacement_cb(void *arg)
+uint32_t get_time_interval_for_current_session_key()
+{
+    uint16_t divider = (MAX_TIME_INTEVAL - START_MS) / BASE_SCALER_MS;
+    return (uint32_t)(((key_id % divider) * BASE_SCALER_MS) + START_MS);
+}
+
+uint16_t get_current_key_id()
+{
+    return key_id;
+}
+
+void key_replacement_cb()
 {
     generate_128b_key(&next_pre_shared_key);
     ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(next_pre_shared_key));
@@ -44,6 +60,8 @@ void key_replacement_cb(void *arg)
     is_key_replace_request_active = true;
     esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
     test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
+    memcpy(&pre_shared_key, &next_pre_shared_key, sizeof(pre_shared_key));
+    memcpy(&splitted_pre_shared_key, &next_splitted_pre_shared_key, sizeof(pre_shared_key));
 }
 
 uint16_t get_random_fragment_id()
@@ -71,10 +89,10 @@ bool init_payload_encryption()
         generate_128b_key(&pre_shared_key);
         ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(pre_shared_key));
         split_128b_key_to_fragment(&pre_shared_key, &splitted_pre_shared_key);
-        if (esp_timer_create(&key_replacement_timer_args, &key_replacement_timer) != ESP_OK)
-        {
-            return false;
-        }
+        // if (esp_timer_create(&key_replacement_timer_args, &key_replacement_timer) != ESP_OK)
+        // {
+        //     return false;
+        // }
     }
 
     return isInitialized;
@@ -89,27 +107,20 @@ bool set_key_replacement_time_in_s(const double time_in_s)
 
 int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * encrypted_pdu)
 {
-    static bool isTimerFirstStarted = false;
-    if (isTimerFirstStarted == false)
-    {
-        esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
-        test_log_sender_key_replace_time_in_s(KEY_REPLACE_TIME_IN_S);
-        isTimerFirstStarted = true;
-    }
-
+    static uint64_t encrypted_packet_counter = 0;
+    encrypted_packet_counter++;
+    
     if (payload_size > MAX_PDU_PAYLOAD_SIZE)
     {
         ESP_LOGE(MSG_SENDER_LOG_GROUP, "Payload size exceeds maximum allowed size");
         return 1;
     }
 
-    if (is_key_replace_request_active == true)
+    if (encrypted_packet_counter % key_replacement_packet_counter == 0)
     {
         ESP_LOGI(MSG_SENDER_LOG_GROUP, "Key replacement in progress...");
+        key_replacement_cb();
         key_id = get_random_key_id();
-        memcpy(&pre_shared_key, &next_pre_shared_key, sizeof(pre_shared_key));
-        memcpy(&splitted_pre_shared_key, &next_splitted_pre_shared_key, sizeof(pre_shared_key));
-        is_key_replace_request_active = false;
     }
 
     const uint8_t key_fragment_no = get_random_fragment_id();

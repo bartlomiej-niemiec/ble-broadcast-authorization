@@ -161,14 +161,6 @@ void app_main(void)
     if (init_controller == true)
     {
         register_broadcast_new_data_callback(data_set_success_cb);
-
-        if (start_pc_serial_communication() != ESP_OK)
-        {
-            ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed initializtion of pc communication");
-            return;
-        }
-        register_serial_data_received_cb(serial_data_received);
-
         ble_sender_main();
     }
     else
@@ -219,12 +211,9 @@ void ble_sender_main()
 
 void sender_wair_for_start_cmd(int *state)
 {
-    if (xSemaphoreTake(xStartCmdReceived, MAX_BLOCK_TIME_SEMAPHORE_TICKS) == pdPASS)
-    {
-        ESP_LOGI(SENDER_APP_LOG_GROUP, "Received Start Command From Pc");
-        *state = SENDER_TEST_START_PDU;
-    }
-    vTaskDelay(TASK_DELAY_SYSTICK);
+    const uint32_t TEST_START_DELAY_IN_MS = 5 * 1000;  
+    vTaskDelay(pdMS_TO_TICKS(TEST_START_DELAY_IN_MS));
+    *state = SENDER_TEST_START_PDU;
 }
 
 void sender_test_start_pdu(int *state)

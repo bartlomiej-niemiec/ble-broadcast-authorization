@@ -409,7 +409,7 @@ int start_up_sec_processing()
 
     if (status == 0)
     {
-        int key_reconstructor_status = start_up_key_reconstructor(MAX_BLE_CONSUMERS * 2);
+        int key_reconstructor_status = start_up_key_reconstructor(MAX_BLE_CONSUMERS * 10);
         if (key_reconstructor_status != 0)
         {
             status = -3;

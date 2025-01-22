@@ -7,6 +7,7 @@
 #include "ble_broadcast_controller.h"
 #include "test.h"
 
+#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 
@@ -15,6 +16,8 @@
 
 #define EVENT_GROUP_WAIT_MS 50
 #define EVENT_GROUP_WAIT_SYSTICK pdMS_TO_TICKS(EVENT_GROUP_WAIT_MS)
+
+#define SENDERS_NUMBER 2
 
 static const char * BLE_GAP_LOG_GROUP = "BLE_RECEIVER";
 
@@ -34,8 +37,12 @@ static esp_ble_scan_params_t default_ble_scan_params = {
 };
 
 static EventGroupHandle_t receiverAppEventGroup;
-static volatile receiver_state_machine g_current_state = RECEIVER_WAIT_FOR_TEST_START_PDU;
 
+static esp_bd_addr_t active_test_senders[2] = {
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+};
+static uint16_t active_test_senders_counter = 0;
 
 void ble_receiver_main_loop();
 void handle_wait_for_start_pdu(int *state, EventBits_t events);
@@ -151,17 +158,37 @@ void receiver_app_scan_complete_callback(int64_t timestamp_us, uint8_t *data, si
 
     if (is_test_pdu(data, data_size) == ESP_OK)
     {
-        if (received_test_start == false && is_test_start_pdu(data, data_size) == ESP_OK)
+        if (is_test_start_pdu(data, data_size) == ESP_OK)
         {
-            ESP_LOGI(BLE_GAP_LOG_GROUP, "Received test start PDU");
-            xEventGroupSetBits(receiverAppEventGroup, EVENT_START_PDU);
-            received_test_start = true;
+            if (received_test_start == false)
+            {
+                ESP_LOGI(BLE_GAP_LOG_GROUP, "Received test start PDU");
+                xEventGroupSetBits(receiverAppEventGroup, EVENT_START_PDU);
+                received_test_start = true;
+            }
         }
-        else if (received_test_end == false && is_test_end_pdu(data, data_size) == ESP_OK)
+        else if (is_test_end_pdu(data, data_size) == ESP_OK)
         {
-            ESP_LOGI(BLE_GAP_LOG_GROUP, "Received test end PDU");
-            xEventGroupSetBits(receiverAppEventGroup, EVENT_END_PDU);
-            received_test_end = true;
+            for (int i = 0; i < SENDERS_NUMBER; i++)
+            {
+                int result = memcmp(active_test_senders[i], mac_address, sizeof(esp_bd_addr_t));
+                if (result == 0)
+                {
+                    break;
+                }
+                else
+                {
+                    memcpy(active_test_senders[i], mac_address, sizeof(esp_bd_addr_t));
+                    active_test_senders_counter++;
+                }
+            }
+
+            if (active_test_senders_counter == SENDERS_NUMBER)
+            {
+                ESP_LOGI(BLE_GAP_LOG_GROUP, "Received test end PDU");
+                xEventGroupSetBits(receiverAppEventGroup, EVENT_END_PDU);
+                received_test_end = true;
+            }
         }
     }
 }
