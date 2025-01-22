@@ -12,9 +12,7 @@
 
 #include "test.h"
 
-#define KEY_RECONSTRUCTION_TASK_SIZE 4096
-#define RECONSTRUCTOR_TASK_CORE 1
-#define RECONSTRUCTOR_TASK_PRIORITY 10
+#include "tasks_data.h"
 
 #define MAX_ELEMENTS_IN_QUEUE 15
 
@@ -34,7 +32,6 @@ typedef struct{
     esp_bd_addr_t consumer_mac_address;
 } __attribute__((aligned(4))) reconstructor_queue_element;
 
-static const char* RECONSTRUCTION_TASK_NAME = "KEY_RECONSTRUCTION_TASK";
 static const char* REC_LOG_GROUP = "RECONSTRUCTION TASK";
 
 typedef struct {
@@ -124,12 +121,12 @@ int start_up_key_reconstructor(const uint8_t max_key_reconstrunction_count) {
         {
             BaseType_t  taskCreateResult = xTaskCreatePinnedToCore(
                 reconstructor_main,
-                RECONSTRUCTION_TASK_NAME, 
-                (uint32_t) KEY_RECONSTRUCTION_TASK_SIZE,
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].name, 
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].stackSize,
                 NULL,
-                (UBaseType_t) RECONSTRUCTOR_TASK_PRIORITY,
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].priority,
                 &st_reconstructor_control.xRecontructionKeyTask,
-                RECONSTRUCTOR_TASK_CORE
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].core
                 );
         
             if (taskCreateResult != pdPASS) {

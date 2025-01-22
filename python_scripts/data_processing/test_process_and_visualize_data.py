@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import python_scripts.data_processing.test_data_resulst as results
 from prettytable import PrettyTable
+import statistics
 
 TESTED_PAYLOAD_SIZES_IN_BYTES = [4, 10, 16]
 TESTED_ADVERTISING_INTERVALS_IN_MS = [20, 50, 100, 300, 500, 1000]
@@ -159,7 +160,8 @@ def plot_key_reconstruction_average_time(adv_time_20ms, adv_time_50ms, adv_time_
     plt.show()
 
 
-def plot_dq_fill_percentage(adv_time_20ms, adv_time_50ms, adv_time_100ms, adv_time_300ms, adv_time_500ms, adv_time_1000ms):
+def plot_dq_fill_percentage(adv_time_20ms, adv_time_50ms, adv_time_100ms, adv_time_300ms, adv_time_500ms,
+                            adv_time_1000ms):
     x_points_payload_sizes = np.array(TESTED_PAYLOAD_SIZES_IN_BYTES)
 
     # ADV INTERVALS PLOT
@@ -200,6 +202,26 @@ def plot_dq_fill_percentage(adv_time_20ms, adv_time_50ms, adv_time_100ms, adv_ti
     fig.supylabel('Deferred Queue Average Fill [%]')
     fig.suptitle('Deferred Queue Average Fill to Key Reconstruction Complete')
     fig.legend()
+    plt.show()
+
+
+def plot_dq_fill_percentage_one_plot(data):
+    x_points_adv_intervals = np.array(TESTED_ADVERTISING_INTERVALS_IN_MS)
+
+    y_points = np.array(data)
+    plt.scatter(x_points_adv_intervals, y_points, color='r', marker="+", linewidth=5)
+
+    # Naming the x-axis, y-axis and the whole graph
+    plt.xticks(np.arange(0, 1000, step=50))  # Set label locations.
+    plt.grid()
+    plt.xlabel("Adv time interval[ms]")
+    plt.ylabel("Deferred Queue Fill[%]")
+    plt.title("Deferred Queue Fill at different payload sizes and adv intervals")
+
+    # Adding legend, which helps us recognize the curve according to it's color
+    plt.legend()
+
+    # To load the display window
     plt.show()
 
 
@@ -292,5 +314,16 @@ if __name__ == "__main__":
         AVERAGE_DQ_FILL_FOR_500MS,
         AVERAGE_DQ_FILL_FOR_1000MS
     )
+
+    dq_avg = [
+        statistics.mean(AVERAGE_DQ_FILL_FOR_20MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_50MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_100MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_300MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_500MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_1000MS)
+    ]
+
+    plot_dq_fill_percentage_one_plot(dq_avg)
 
     print_packet_loss_tables(results.TEST_DATA_4_BYTES, results.TEST_DATA_10_BYTES, results.TEST_DATA_16_BYTES)

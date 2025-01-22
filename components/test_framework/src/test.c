@@ -14,6 +14,9 @@
 #define TEST_SEMAPHORE_MAX_BLOCK_TIME_MS 50
 #define TEST_SEMAPHORE_MAX_BLOCK_TIME_SYSTICK pdMS_TO_TICKS(TEST_SEMAPHORE_MAX_BLOCK_TIME_MS)
 
+#define PACKET_CONST_COUNTER 100
+#define RECEIVER_TEST_TASK_STACK_SIZE 6000
+
 uint8_t test_payload_4_bytes[4] = {0xb2, 0xaf, 0xc5, 0x6c};
 uint8_t test_payload_10_bytes[10] = {0x74, 0x5d, 0xa3, 0x45, 0xa1, 0x1b, 0x0e, 0x02, 0x2a, 0x7f};
 uint8_t test_payload_16_bytes[16] = {0x54, 0xeb, 0xca, 0x9d, 0x05, 0xff, 0x40, 0x49, 0x17, 0xa0, 0x3a, 0xd8, 0x77, 0x62, 0xed, 0xe2};
@@ -63,7 +66,6 @@ static esp_bd_addr_t zero_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 static TEST_ROLE test_role;
 static esp_bd_addr_t expected_sender_addrr = {0x1c,0x69, 0x20, 0x30, 0xde, 0x82};
 
-#define RECEIVER_TEST_TASK_STACK_SIZE 6000
 static TaskHandle_t xTestPacketsTask;
 static volatile QueueHandle_t xTestPacketsQueue;
 static const uint16_t MAX_RECEIVER_TEST_QUEUE_SIZE = 70;
@@ -300,7 +302,7 @@ void init_task_resources()
 void start_test_measurment(TEST_ROLE role)
 {
     test_role = role;
-    init_task_resources();
+    //init_task_resources();
     ESP_LOGI(TEST_ESP_LOG_GROUP, "--------------TEST STARTED------------");
     ESP_LOGI(TEST_ESP_LOG_GROUP, "--------------%s------------", role == TEST_SENDER_ROLE ? "SENDER" : "RECEIVER");
     test_duration_st.test_start_timestamp_ms = esp_timer_get_time() / 1000;
@@ -308,10 +310,12 @@ void start_test_measurment(TEST_ROLE role)
 
 void end_test_measurment()
 {
-    while (is_queue_empty() == false)
-    {
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    
+    // while (is_queue_empty() == false)
+    // {
+    //     vTaskDelay(pdMS_TO_TICKS(100));
+    // }
 
     test_duration_st.test_end_timestamp_ms = esp_timer_get_time() / 1000;
     int test_duration_s = (int)((test_duration_st.test_end_timestamp_ms - test_duration_st.test_start_timestamp_ms) / 1000);
@@ -366,17 +370,43 @@ void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_
         ESP_LOGE(TEST_ESP_LOG_GROUP, "Passed PDU Data or Mac Addrr is NULL");
         return;
     }
-
-    test_packet_structure pdu;
-    pdu.pdu_payload_size = data_len;
-    memcpy(pdu.mac_addr, mac_address, sizeof(esp_bd_addr_t));
-    memcpy(pdu.packet, data, data_len);
-    if (xTestPacketsQueue != NULL)
+    static uint32_t counter = 0;
+    int index = -1;
+    if ((index = get_consumer_index(mac_address)) >= 0)
     {
-        int result = xQueueSend(xTestPacketsQueue, &pdu, TEST_QUEUE_WAIT_SYSTICKS);
-        if (result != pdTRUE)
+        if (is_data_decoded_valid(data, data_len) == false)
         {
-            ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to queue data to test log queue");
+            ble_test_consumers[index].wrongly_decoded_data_packets++;
+        }
+        else
+        {
+            ble_test_consumers[index].total_packets_received++;
+            if (ble_test_consumers[index].total_packets_received % PACKET_CONST_COUNTER == 0)
+            {
+                counter++;
+                ESP_LOG_BUFFER_HEX("TEST_LOG_GROUP: Sender addr", data, data_len);
+                ESP_LOGI(TEST_ESP_LOG_GROUP, "%lu Packet has been received!", (uint32_t) (counter * PACKET_CONST_COUNTER));
+            }
+        }
+    }
+    else
+    {
+        if ((index = add_consumer_to_table(mac_address)) >= 0)
+        {
+            if (is_data_decoded_valid(data, data_len) == false)
+            {
+                ble_test_consumers[index].wrongly_decoded_data_packets++;
+            }
+            else
+            {
+                ble_test_consumers[index].total_packets_received++;
+                if (ble_test_consumers[index].total_packets_received % PACKET_CONST_COUNTER == 0)
+                {
+                    counter++;
+                    ESP_LOG_BUFFER_HEX("TEST_LOG_GROUP: Sender addr", data, data_len);
+                    ESP_LOGI(TEST_ESP_LOG_GROUP, "%lu Packet has been received!", (uint32_t) (counter * PACKET_CONST_COUNTER));
+                }
+            }
         }
     }
 }
@@ -389,14 +419,12 @@ void test_log_bad_structure_packet(esp_bd_addr_t addr)
     int index = -1;
     if ((index = get_consumer_index(addr)) >= 0)
     {
-        ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet structure is wrong/modified!");
         ble_test_consumers[index].no_bad_structure_packets++;
     }
     else
     {
         if ((index = add_consumer_to_table(addr)) >= 0)
         {
-            ESP_LOGI(TEST_ESP_LOG_GROUP, "Packet structure is wrong/modified!");
             ble_test_consumers[index].no_bad_structure_packets++;
         }
     }
@@ -409,14 +437,12 @@ void test_log_packet_send(uint8_t *data, size_t data_len, esp_bd_addr_t mac_addr
         ESP_LOGE(TEST_ESP_LOG_GROUP, "Passed PDU Data or Mac Addrr is NULL");
         return;
     }
-
-    test_packet_structure pdu;
-    pdu.pdu_payload_size = data_len;
-    memcpy(pdu.packet, data, data_len);
-    int result = xQueueSend(xTestPacketsQueue, &pdu, TEST_QUEUE_WAIT_SYSTICKS);
-    if (result != pdTRUE)
+    static uint32_t counter = 0;
+    ++ble_test_producer.total_packets_send;
+    if (ble_test_producer.total_packets_send % PACKET_CONST_COUNTER == 0)
     {
-        ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to queue data to test log queue");
+        counter++;
+        ESP_LOGI(TEST_ESP_LOG_GROUP, "%lu Packet has been sent!", (uint32_t) (counter * PACKET_CONST_COUNTER));
     }
 }
 

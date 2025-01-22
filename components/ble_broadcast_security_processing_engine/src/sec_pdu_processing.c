@@ -10,6 +10,8 @@
 
 #include "beacon_test_pdu.h"
 
+#include "tasks_data.h"
+
 //FreeRTOS
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -20,9 +22,6 @@
 #include <limits.h>
 #include <string.h>
 
-#define SEC_PROCESSING_TASK_SIZE 4096
-#define SEC_PROCESSING_TASK_PRIORITY 5
-#define SEC_PROCESSING_TASK_CORE 1
 #define MAX_PROCESSING_QUEUE_ELEMENTS 100
 #define MAX_PROCESSED_PDUS_AT_ONCE 20
 
@@ -30,7 +29,6 @@
 #define QUEUE_TIMEOUT_SYS_TICKS pdMS_TO_TICKS(QUEUE_TIMEOUT_MS)
 
 static const char * SEC_PDU_PROC_LOG = "SEC_PDU_PROCESSING";
-static const char* SEC_PROCESSING_TASK_NAME = "SEC_PDU_PROCESSING TASK";
 
 // Event group flags
 #define EVENT_NEW_PDU (1 << 0)
@@ -208,7 +206,7 @@ static void handle_event_process_deferred_pdus() {
         }
         else
         {
-            ESP_LOGI(SEC_PROCESSING_TASK_NAME, "BLE Consumer NULL PTR");
+            ESP_LOGI(SEC_PDU_PROC_LOG, "BLE Consumer NULL PTR");
         }
     }
 }
@@ -222,7 +220,7 @@ void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t
     decrypt_pdu(key, pdu, output, MAX_PDU_PAYLOAD_SIZE);
     if (pdu->payload_size > MAX_PDU_PAYLOAD_SIZE)
     {
-        ESP_LOGE(SEC_PROCESSING_TASK_NAME, "PDU PAYLOAD SIZE %i GREATER THAN MAX SIZE!", (int) pdu->payload_size);
+        ESP_LOGE(SEC_PDU_PROC_LOG, "PDU PAYLOAD SIZE %i GREATER THAN MAX SIZE!", (int) pdu->payload_size);
     }
     notify_pdo_collection_observers(sec_pdu_st.payload_decription_subcribers_collection, output, pdu->payload_size, mac_address);
 }
@@ -272,7 +270,7 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
             }
             else
             {
-                ESP_LOGE(SEC_PROCESSING_TASK_NAME, "DROPPED PACKET!");
+                ESP_LOGE(SEC_PDU_PROC_LOG, "DROPPED PACKET!");
             }
         }
     }
@@ -429,12 +427,12 @@ int start_up_sec_processing()
         {
             BaseType_t  taskCreateResult = xTaskCreatePinnedToCore(
                 sec_processing_main,
-                SEC_PROCESSING_TASK_NAME, 
-                (uint32_t) SEC_PROCESSING_TASK_SIZE,
+                tasksDataArr[SEC_PDU_PROCESSING].name, 
+                tasksDataArr[SEC_PDU_PROCESSING].stackSize,
                 NULL,
-                (UBaseType_t) SEC_PROCESSING_TASK_PRIORITY,
+                tasksDataArr[SEC_PDU_PROCESSING].priority,
                 &(sec_pdu_st.xSecProcessingTask),
-                SEC_PROCESSING_TASK_CORE
+                tasksDataArr[SEC_PDU_PROCESSING].core
                 );
         
             if (taskCreateResult != pdPASS)

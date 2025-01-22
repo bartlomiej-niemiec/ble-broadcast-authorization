@@ -32,55 +32,55 @@ TEST_DATA_4_BYTES = [
             sender_advertising_interval_ms=20,
             sender_total_pdus_send=2000,
             sender_payload_size=4,
-            packets_received=802,
+            packets_received=1552,
             packets_malformed=0,
-            average_kr_tim_in_s=0.36,
-            average_dq_fill_for_kr=31.00
+            average_kr_tim_in_s=0.14,
+            average_dq_fill_for_kr=11.38
         ),
     TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
         sender_payload_size=4,
-        packets_received=1601,
+        packets_received=1757,
         packets_malformed=0,
-        average_kr_tim_in_s=0.36,
-        average_dq_fill_for_kr=23.64
+        average_kr_tim_in_s=0.43,
+        average_dq_fill_for_kr=11.25
     ),
     TestData(
         sender_advertising_interval_ms=100,
         sender_total_pdus_send=2000,
         sender_payload_size=4,
-        packets_received=1671,
+        packets_received=1840,
         packets_malformed=0,
-        average_kr_tim_in_s=0.73,
-        average_dq_fill_for_kr=24.00
+        average_kr_tim_in_s=0.69,
+        average_dq_fill_for_kr=9.50
     ),
     TestData(
         sender_advertising_interval_ms=300,
         sender_total_pdus_send=2000,
         sender_payload_size=4,
-        packets_received=1732,
+        packets_received=1878,
         packets_malformed=0,
-        average_kr_tim_in_s=2.49,
-        average_dq_fill_for_kr=26.67
+        average_kr_tim_in_s=2.44,
+        average_dq_fill_for_kr=10.00
     ),
     TestData(
         sender_advertising_interval_ms=500,
         sender_total_pdus_send=2000,
         sender_payload_size=4,
-        packets_received=1710,
+        packets_received=1914,
         packets_malformed=0,
-        average_kr_tim_in_s=4.16,
-        average_dq_fill_for_kr=28.00
+        average_kr_tim_in_s=4.33,
+        average_dq_fill_for_kr=11.00
     ),
     TestData(
         sender_advertising_interval_ms=1000,
         sender_total_pdus_send=2000,
         sender_payload_size=4,
-        packets_received=1737,
+        packets_received=1894,
         packets_malformed=0,
-        average_kr_tim_in_s=8.51,
-        average_dq_fill_for_kr=28.67
+        average_kr_tim_in_s=8.56,
+        average_dq_fill_for_kr=11.25
     )
 ]
 
@@ -88,56 +88,56 @@ TEST_DATA_10_BYTES = [
     TestData(
             sender_advertising_interval_ms=20,
             sender_total_pdus_send=2000,
-            sender_payload_size=4,
-            packets_received=818,
+            sender_payload_size=10,
+            packets_received=1539,
             packets_malformed=0,
-            average_kr_tim_in_s=0.29,
-            average_dq_fill_for_kr=28.18
+            average_kr_tim_in_s=0.26,
+            average_dq_fill_for_kr=15.25
         ),
     TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
-        packets_received=1607,
+        packets_received=1753,
         packets_malformed=0,
-        average_kr_tim_in_s=0.42,
-        average_dq_fill_for_kr=27.27
+        average_kr_tim_in_s=0.36,
+        average_dq_fill_for_kr=9.62
     ),
     TestData(
         sender_advertising_interval_ms=100,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
-        packets_received=1663,
+        packets_received=1834,
         packets_malformed=0,
-        average_kr_tim_in_s=0.60,
-        average_dq_fill_for_kr=19.33
+        average_kr_tim_in_s=0.72,
+        average_dq_fill_for_kr=9.13
     ),
     TestData(
         sender_advertising_interval_ms=300,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
-        packets_received=1721,
+        packets_received=1896,
         packets_malformed=0,
-        average_kr_tim_in_s=3.89,
-        average_dq_fill_for_kr=39.67
+        average_kr_tim_in_s=2.04,
+        average_dq_fill_for_kr=9.25
     ),
     TestData(
         sender_advertising_interval_ms=500,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
-        packets_received=1725,
+        packets_received=1918,
         packets_malformed=0,
-        average_kr_tim_in_s=3.87,
-        average_dq_fill_for_kr=25.33
+        average_kr_tim_in_s=3.60,
+        average_dq_fill_for_kr=9.75
     ),
     TestData(
         sender_advertising_interval_ms=1000,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
-        packets_received=1732,
+        packets_received=1906,
         packets_malformed=0,
-        average_kr_tim_in_s=8.06,
-        average_dq_fill_for_kr=26.67
+        average_kr_tim_in_s=7.94,
+        average_dq_fill_for_kr=10.75
     )
 ]
 
@@ -146,54 +146,54 @@ TEST_DATA_16_BYTES = [
             sender_advertising_interval_ms=20,
             sender_total_pdus_send=2000,
             sender_payload_size=4,
-            packets_received=834,
+            packets_received=1527,
             packets_malformed=0,
-            average_kr_tim_in_s=0.47,
-            average_dq_fill_for_kr=38.18
+            average_kr_tim_in_s=0.26,
+            average_dq_fill_for_kr=16.00
         ),
     TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
         sender_payload_size=16,
-        packets_received=1635,
+        packets_received=1749,
         packets_malformed=0,
-        average_kr_tim_in_s=0.46,
-        average_dq_fill_for_kr=29.33
+        average_kr_tim_in_s=0.39,
+        average_dq_fill_for_kr=10.62
     ),
     TestData(
         sender_advertising_interval_ms=100,
         sender_total_pdus_send=2000,
         sender_payload_size=16,
-        packets_received=1677,
+        packets_received=1831,
         packets_malformed=0,
-        average_kr_tim_in_s=0.89,
-        average_dq_fill_for_kr=27.88
+        average_kr_tim_in_s=0.85,
+        average_dq_fill_for_kr=11.00
     ),
     TestData(
         sender_advertising_interval_ms=300,
         sender_total_pdus_send=2000,
         sender_payload_size=16,
-        packets_received=1723,
+        packets_received=1905,
         packets_malformed=0,
-        average_kr_tim_in_s=3.57,
-        average_dq_fill_for_kr=37.33
+        average_kr_tim_in_s=2.51,
+        average_dq_fill_for_kr=10.87
     ),
     TestData(
         sender_advertising_interval_ms=500,
         sender_total_pdus_send=2000,
         sender_payload_size=16,
-        packets_received=1727,
+        packets_received=1907,
         packets_malformed=0,
-        average_kr_tim_in_s=3.84,
-        average_dq_fill_for_kr=25.00
+        average_kr_tim_in_s=4.20,
+        average_dq_fill_for_kr=11.25
     ),
     TestData(
         sender_advertising_interval_ms=1000,
         sender_total_pdus_send=2000,
         sender_payload_size=16,
-        packets_received=1733,
+        packets_received=1898,
         packets_malformed=0,
-        average_kr_tim_in_s=7.85,
-        average_dq_fill_for_kr=24.67
+        average_kr_tim_in_s=7.95,
+        average_dq_fill_for_kr=10.62
     )
 ]

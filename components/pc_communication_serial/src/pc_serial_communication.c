@@ -6,13 +6,12 @@
 #include "esp_log.h"
 #include <string.h>
 
+#include "tasks_data.h"
+
 #define UART_PORT_NUM                       UART_NUM_0
 #define UART_BAUD_RATE                      115200
 #define BUF_SIZE                            1024
 #define QUEUE_SIZE                          10
-#define PC_SERIAL_TASK_NAME                 "PC SERIAL COMMUNICATION TASK"
-#define PC_SERIAL_TASK_STACK_SIZE           4096
-#define PC_SERIAL_TASK_PRIORITY             12
 #define PC_SERIAL_TASK_DELAY_MS             100
 #define PC_SERIAL_TASK_DELAY_SYS_TICK       pdMS_TO_TICKS(PC_SERIAL_TASK_DELAY_MS)
 #define QUEUE_TIMEOUT_SYS_TICK              pdMS_TO_TICKS(PC_SERIAL_TASK_DELAY_MS)
@@ -95,10 +94,10 @@ esp_err_t start_pc_serial_communication()
     {
         (void) xTaskCreate(
             pc_serial_main,
-            PC_SERIAL_TASK_NAME,
-            PC_SERIAL_TASK_STACK_SIZE,
+            tasksDataArr[PC_SERIAL_COMMUNICATION_TASK].name,
+            tasksDataArr[PC_SERIAL_COMMUNICATION_TASK].stackSize,
             NULL,
-            PC_SERIAL_TASK_PRIORITY,
+            tasksDataArr[PC_SERIAL_COMMUNICATION_TASK].priority,
             &control_st.xTask
         );
 

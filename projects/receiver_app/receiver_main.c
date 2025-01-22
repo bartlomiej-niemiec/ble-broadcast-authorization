@@ -34,6 +34,8 @@ static esp_ble_scan_params_t default_ble_scan_params = {
 };
 
 static EventGroupHandle_t receiverAppEventGroup;
+static volatile receiver_state_machine g_current_state = RECEIVER_WAIT_FOR_TEST_START_PDU;
+
 
 void ble_receiver_main_loop();
 void handle_wait_for_start_pdu(int *state, EventBits_t events);
@@ -144,17 +146,22 @@ void receiver_app_scan_complete_callback(int64_t timestamp_us, uint8_t *data, si
     if (data == NULL)
         return;
 
+    static bool received_test_start = false;
+    static bool received_test_end = false;
+
     if (is_test_pdu(data, data_size) == ESP_OK)
     {
-        if (is_test_start_pdu(data, data_size) == ESP_OK)
+        if (received_test_start == false && is_test_start_pdu(data, data_size) == ESP_OK)
         {
             ESP_LOGI(BLE_GAP_LOG_GROUP, "Received test start PDU");
             xEventGroupSetBits(receiverAppEventGroup, EVENT_START_PDU);
+            received_test_start = true;
         }
-        else if (is_test_end_pdu(data, data_size) == ESP_OK)
+        else if (received_test_end == false && is_test_end_pdu(data, data_size) == ESP_OK)
         {
             ESP_LOGI(BLE_GAP_LOG_GROUP, "Received test end PDU");
             xEventGroupSetBits(receiverAppEventGroup, EVENT_END_PDU);
+            received_test_end = true;
         }
     }
 }
