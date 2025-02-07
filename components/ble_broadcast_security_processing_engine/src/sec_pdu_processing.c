@@ -230,7 +230,7 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
     if (output_len == MAX_PDU_PAYLOAD_SIZE)
     {
         uint8_t nonce[NONCE_SIZE] = {0};
-        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_session_data, get_key_expected_time_interval_multiplier(pdu->bcd.key_exchange_data), pdu->bcd.xor_seed);
+        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_session_data, pdu->bcd.xor_seed);
         aes_ctr_decrypt_payload(pdu->payload, pdu->payload_size, key->key, nonce, output);
     }
 }
@@ -318,6 +318,12 @@ void key_reconstruction_complete(uint8_t key_id, key_128b * const reconstructed_
         return;
     }
 
+    bool key_in_cache_already = is_key_in_cache(p_ble_consumer->context.key_cache, key_id);
+    if (key_in_cache_already == true)
+        return;
+
+
+    test_log_key_reconstruction_end(mac_address, key_id);
     double queue_percentage = get_queue_elements_in_percentage(p_ble_consumer->context.deferred_queue_count, DEFERRED_QUEUE_SIZE);
     test_log_deferred_queue_percentage(queue_percentage, p_ble_consumer->mac_address_arr);
 

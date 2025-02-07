@@ -17,14 +17,14 @@
 #define KEY_REPLACEMENT_TIMEOUT_S 30
 #define KEY_REPLACEMENT_TIMEOUT_US(s) ((s) * (1000000))
 
-#define START_MS 3000
-#define BASE_SCALER_MS 250
-#define MAX_TIME_INTEVAL 5000
+#define START_MS 20
+#define BASE_SCALER_MS 20
+#define MAX_TIME_INTEVAL 200
 
 static const char* MSG_SENDER_LOG_GROUP = "MSG_ENCRYPTOR";
 static key_128b pre_shared_key;
 static key_splitted splitted_pre_shared_key;
-static key_128b next_pre_shared_key;
+static key_128b next_pre_shared_key; 
 static key_splitted next_splitted_pre_shared_key;
 static volatile bool is_key_replace_request_active = false;
 static uint16_t key_id;
@@ -32,14 +32,9 @@ static uint8_t key_time_interval_multiplier;
 static uint8_t encrypt_payload_arr[MAX_PDU_PAYLOAD_SIZE] = {0};
 static  esp_timer_handle_t key_replacement_timer;
 void key_replacement_cb();
-// static esp_timer_create_args_t key_replacement_timer_args = {
-//     .callback = key_replacement_cb,
-//     .arg = NULL,
-//     .name = "KEY REPLACEMENT TIMER",
-// };
 
 static volatile uint16_t KEY_REPLACE_TIME_IN_S;
-static uint32_t key_replacement_packet_counter = 200;
+static volatile uint32_t key_replacement_packet_counter = 200;
 
 uint32_t get_time_interval_for_current_session_key()
 {
@@ -58,7 +53,6 @@ void key_replacement_cb()
     ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(next_pre_shared_key));
     split_128b_key_to_fragment(&next_pre_shared_key, &next_splitted_pre_shared_key);
     is_key_replace_request_active = true;
-    esp_timer_start_once(key_replacement_timer, KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
     test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
     memcpy(&pre_shared_key, &next_pre_shared_key, sizeof(pre_shared_key));
     memcpy(&splitted_pre_shared_key, &next_splitted_pre_shared_key, sizeof(pre_shared_key));
@@ -67,6 +61,20 @@ void key_replacement_cb()
 uint16_t get_random_fragment_id()
 {
     return (esp_random() % NO_KEY_FRAGMENTS);
+}
+
+uint16_t get_next_key_fragment()
+{
+    static uint16_t key_fragment_no = 0;
+    uint16_t return_fragment_no = key_fragment_no;
+    
+    key_fragment_no++;
+    if (key_fragment_no > 3)
+    {
+        key_fragment_no = 0;
+    }
+
+    return return_fragment_no; 
 }
 
 uint8_t get_random_time_interval_value()
@@ -89,19 +97,14 @@ bool init_payload_encryption()
         generate_128b_key(&pre_shared_key);
         ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(pre_shared_key));
         split_128b_key_to_fragment(&pre_shared_key, &splitted_pre_shared_key);
-        // if (esp_timer_create(&key_replacement_timer_args, &key_replacement_timer) != ESP_OK)
-        // {
-        //     return false;
-        // }
     }
 
     return isInitialized;
 }
 
-bool set_key_replacement_time_in_s(const double time_in_s)
+bool set_key_replacement_pdu_count(const uint32_t count)
 {
-    ESP_LOGI(MSG_SENDER_LOG_GROUP, "KEY REPLACE TIME SET TO: %f", time_in_s);
-    KEY_REPLACE_TIME_IN_S = time_in_s;
+    key_replacement_packet_counter = count;
     return true;
 }
 
@@ -123,20 +126,19 @@ int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * en
         key_id = get_random_key_id();
     }
 
-    const uint8_t key_fragment_no = get_random_fragment_id();
+    const uint8_t key_fragment_no = get_next_key_fragment();
     const uint8_t random_xor_seed = get_random_seed();
     uint8_t nonce[NONCE_SIZE] = {0};
 
     uint16_t pdu_key_session_data = produce_key_session_data(key_id, key_fragment_no);
     encrypted_pdu->bcd.key_session_data = pdu_key_session_data;
-    encrypted_pdu->bcd.key_exchange_data = produce_key_exchange_data(key_time_interval_multiplier, 0);
     encrypted_pdu->bcd.xor_seed = random_xor_seed;
 
     xor_encrypt_key_fragment(splitted_pre_shared_key.fragment[key_fragment_no], encrypted_pdu->bcd.enc_key_fragment, random_xor_seed);
         
     calculate_hmac_of_fragment(splitted_pre_shared_key.fragment[key_fragment_no], encrypted_pdu->bcd.enc_key_fragment, encrypted_pdu->bcd.key_fragment_hmac);
 
-    build_nonce(nonce, &(encrypted_pdu->marker), pdu_key_session_data, key_time_interval_multiplier, random_xor_seed);
+    build_nonce(nonce, &(encrypted_pdu->marker), pdu_key_session_data, random_xor_seed);
 
     uint8_t encrypt_payload_arr[MAX_PDU_PAYLOAD_SIZE] = {0};  // Local buffer for encryption
     memcpy(encrypt_payload_arr, payload, payload_size);

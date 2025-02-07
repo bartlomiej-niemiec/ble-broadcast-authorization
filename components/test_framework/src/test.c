@@ -475,15 +475,19 @@ void test_log_key_reconstruction_start(esp_bd_addr_t mac_address, uint16_t key_i
 
 void test_log_key_reconstruction_end(esp_bd_addr_t mac_address, uint16_t key_id)
 {
-    int index = -1;
-    if ((index = get_consumer_index(mac_address)) >= 0)
+    static uint16_t prev_logged_key_id = 0;
+    if (prev_logged_key_id != key_id)
     {
-        ble_test_consumers[index].key_rec_data.key_reconstruction_end_ms = esp_timer_get_time() / 1000;
-        ble_test_consumers[index].no_reconstructed_keys++;
-        ble_test_consumers[index].total_key_reconstruction_time += ble_test_consumers[index].key_rec_data.key_reconstruction_end_ms - ble_test_consumers[index].key_rec_data.key_reconstruction_start_ms;
-        ble_test_consumers[index].avarage_key_reconstruction_time = (double) (ble_test_consumers[index].total_key_reconstruction_time / ble_test_consumers[index].no_reconstructed_keys);
+        int index = -1;
+        if ((index = get_consumer_index(mac_address)) >= 0)
+        {
+            ble_test_consumers[index].key_rec_data.key_reconstruction_end_ms = esp_timer_get_time() / 1000;
+            ble_test_consumers[index].no_reconstructed_keys++;
+            ble_test_consumers[index].total_key_reconstruction_time += ble_test_consumers[index].key_rec_data.key_reconstruction_end_ms - ble_test_consumers[index].key_rec_data.key_reconstruction_start_ms;
+            ble_test_consumers[index].avarage_key_reconstruction_time = (double) (ble_test_consumers[index].total_key_reconstruction_time / ble_test_consumers[index].no_reconstructed_keys);
+        }
+        ESP_LOGI(TEST_ESP_LOG_GROUP, "KeyID %i has been reconstructed in time ms %i", (int) key_id, (int)(ble_test_consumers[index].key_rec_data.key_reconstruction_end_ms - ble_test_consumers[index].key_rec_data.key_reconstruction_start_ms));
     }
-    ESP_LOGI(TEST_ESP_LOG_GROUP, "KeyID %i has been reconstructed in time ms %i", (int) key_id, (int)(ble_test_consumers[index].key_rec_data.key_reconstruction_end_ms - ble_test_consumers[index].key_rec_data.key_reconstruction_start_ms));
 }
 
 void test_log_deferred_queue_percentage(double percentage, esp_bd_addr_t mac_address)

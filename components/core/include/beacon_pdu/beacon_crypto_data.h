@@ -10,7 +10,6 @@
 
 typedef struct {            
     uint16_t key_session_data;                    // unique ID for Symmetric Key
-    uint8_t key_exchange_data;                    // number of key fragment (0 - 3)
     uint8_t enc_key_fragment[KEY_FRAGMENT_SIZE];  // encrypted key fragment
     uint8_t xor_seed;                             // random seed for key fragment xor encryption
     uint8_t key_fragment_hmac[HMAC_SIZE];         // hmac of key fragment

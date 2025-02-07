@@ -1,0 +1,17 @@
+@startuml
+title Proces generowania PDU po stronie nadawcy
+start
+if (Sesja klucza wygasła) then (tak)
+    :wygeneruj nowy klucz;
+    :wygeneruj nowy numer sesji;
+    :podziel klucz na fragmenty;
+else (nie)
+endif
+:wybierz fragment klucza;
+:zaszyfruj fragment klucza;
+:oblicz HMAC;
+:zaszyfruj dane;
+:zbuduj PDU;
+:wyślij PDU;
+stop
+@enduml

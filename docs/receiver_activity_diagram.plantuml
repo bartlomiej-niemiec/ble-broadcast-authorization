@@ -1,0 +1,31 @@
+@startuml
+title Proces przetwarzania PDU po stronie odbiorcy
+start
+:Odbierz nowy pakiet;
+if (Poprawny znacznik algorytmu) then (tak)
+    :odczytaj pozostałe pola;
+    if (klucz sesji odkodowany) then (tak)
+        :odszyfruj dane;
+    else (nie)
+        if (fragment klucza odkodowany) then (tak)
+        else (nie)
+            :odszyfruj fragment klucza;
+            :policz HMAC dla odszyfrowanego fragmentu;
+            if (policzony HMAC jest równy HMAC w PDU) then (tak)
+                :zapisz fragment klucza;
+                :sprawdz liczbę zdekodowanych fragmentów klucza;
+                if (odkodowane są wszystkie fragmenty klucza) then (tak)
+                    :odbuduj pełen klucz z fragmentów;
+                    :zapisz klucz;
+                else (nie)
+                endif
+            else (nie)
+            endif
+        endif
+    endif
+else (nie)
+endif
+
+:koniec;
+
+@enduml

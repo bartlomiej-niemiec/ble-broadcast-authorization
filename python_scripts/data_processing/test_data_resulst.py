@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class TestData:
     sender_advertising_interval_ms: int
     sender_total_pdus_send: int
-    sender_payload_size : int
+    sender_payload_size: int
     packets_received: int
     packets_malformed: int
     average_kr_tim_in_s: float
@@ -12,6 +13,13 @@ class TestData:
 
     def get_packet_loss(self):
         return ((self.sender_total_pdus_send - self.packets_received) / self.sender_total_pdus_send) * 100.0
+
+
+@dataclass
+class AverageQueueFill:
+    random_key_fragment_selection: float
+    sequence_key_fragment_selection: float
+    adv_interval_ms: int
 
 
 class DataCollection:
@@ -29,14 +37,14 @@ class DataCollection:
 
 TEST_DATA_4_BYTES = [
     TestData(
-            sender_advertising_interval_ms=20,
-            sender_total_pdus_send=2000,
-            sender_payload_size=4,
-            packets_received=1552,
-            packets_malformed=0,
-            average_kr_tim_in_s=0.14,
-            average_dq_fill_for_kr=11.38
-        ),
+        sender_advertising_interval_ms=20,
+        sender_total_pdus_send=2000,
+        sender_payload_size=4,
+        packets_received=1552,
+        packets_malformed=0,
+        average_kr_tim_in_s=0.14,
+        average_dq_fill_for_kr=11.38
+    ),
     TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
@@ -86,14 +94,14 @@ TEST_DATA_4_BYTES = [
 
 TEST_DATA_10_BYTES = [
     TestData(
-            sender_advertising_interval_ms=20,
-            sender_total_pdus_send=2000,
-            sender_payload_size=10,
-            packets_received=1539,
-            packets_malformed=0,
-            average_kr_tim_in_s=0.26,
-            average_dq_fill_for_kr=15.25
-        ),
+        sender_advertising_interval_ms=20,
+        sender_total_pdus_send=2000,
+        sender_payload_size=10,
+        packets_received=1539,
+        packets_malformed=0,
+        average_kr_tim_in_s=0.26,
+        average_dq_fill_for_kr=15.25
+    ),
     TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
@@ -143,14 +151,14 @@ TEST_DATA_10_BYTES = [
 
 TEST_DATA_16_BYTES = [
     TestData(
-            sender_advertising_interval_ms=20,
-            sender_total_pdus_send=2000,
-            sender_payload_size=4,
-            packets_received=1527,
-            packets_malformed=0,
-            average_kr_tim_in_s=0.26,
-            average_dq_fill_for_kr=16.00
-        ),
+        sender_advertising_interval_ms=20,
+        sender_total_pdus_send=2000,
+        sender_payload_size=4,
+        packets_received=1527,
+        packets_malformed=0,
+        average_kr_tim_in_s=0.26,
+        average_dq_fill_for_kr=16.00
+    ),
     TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
@@ -198,6 +206,7 @@ TEST_DATA_16_BYTES = [
     )
 ]
 
+
 @dataclass
 class DynamicTestData:
     sender_advertising_interval_min: int
@@ -205,7 +214,7 @@ class DynamicTestData:
     sender_advertising_interval_scaler: int
     sender_total_pdus_send: int
     is_payload_size_random: bool
-    sender_payload_size : int
+    sender_payload_size: int
     packets_received: int
     packets_malformed: int
     average_kr_tim_in_s: float
@@ -228,7 +237,7 @@ DYNAMIC_TESTS_RESULTS = [
         average_kr_tim_in_s=0.56,
         average_dq_fill_for_kr=11.77
     ),
-DynamicTestData(
+    DynamicTestData(
         sender_advertising_interval_min=200,
         sender_advertising_interval_max=1000,
         sender_advertising_interval_scaler=100,
@@ -240,7 +249,7 @@ DynamicTestData(
         average_kr_tim_in_s=4.85,
         average_dq_fill_for_kr=10.12
     ),
-DynamicTestData(
+    DynamicTestData(
         sender_advertising_interval_min=1000,
         sender_advertising_interval_max=3000,
         sender_advertising_interval_scaler=250,
@@ -252,7 +261,7 @@ DynamicTestData(
         average_kr_tim_in_s=11.08,
         average_dq_fill_for_kr=10.12
     ),
-DynamicTestData(
+    DynamicTestData(
         sender_advertising_interval_min=3000,
         sender_advertising_interval_max=5000,
         sender_advertising_interval_scaler=250,
@@ -276,7 +285,7 @@ MULTIPLE_SENDERS_20MS_BOTH = (
         average_kr_tim_in_s=0.20,
         average_dq_fill_for_kr=13.75
     ),
-TestData(
+    TestData(
         sender_advertising_interval_ms=20,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
@@ -297,7 +306,7 @@ MULTIPLE_SENDERS_50MS_BOTH = (
         average_kr_tim_in_s=0.42,
         average_dq_fill_for_kr=10.50
     ),
-TestData(
+    TestData(
         sender_advertising_interval_ms=50,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
@@ -318,7 +327,7 @@ MULTIPLE_SENDERS_100MS_BOTH = (
         average_kr_tim_in_s=0.77,
         average_dq_fill_for_kr=9.87
     ),
-TestData(
+    TestData(
         sender_advertising_interval_ms=100,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
@@ -339,7 +348,7 @@ MULTIPLE_SENDERS_300MS_BOTH = (
         average_kr_tim_in_s=2.63,
         average_dq_fill_for_kr=11.25
     ),
-TestData(
+    TestData(
         sender_advertising_interval_ms=300,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
@@ -360,7 +369,7 @@ MULTIPLE_SENDERS_500MS_BOTH = (
         average_kr_tim_in_s=3.24,
         average_dq_fill_for_kr=8.88
     ),
-TestData(
+    TestData(
         sender_advertising_interval_ms=500,
         sender_total_pdus_send=2000,
         sender_payload_size=10,
@@ -371,10 +380,171 @@ TestData(
     )
 )
 
+MULTIPLE_SENDERS_1000MS_BOTH = (
+    TestData(
+        sender_advertising_interval_ms=1000,
+        sender_total_pdus_send=2000,
+        sender_payload_size=10,
+        packets_received=1707,
+        packets_malformed=194,
+        average_kr_tim_in_s=7.45,
+        average_dq_fill_for_kr=9.38
+    ),
+    TestData(
+        sender_advertising_interval_ms=1000,
+        sender_total_pdus_send=2000,
+        sender_payload_size=10,
+        packets_received=1897,
+        packets_malformed=0,
+        average_kr_tim_in_s=5.40,
+        average_dq_fill_for_kr=7.75
+    )
+)
+
 MULTIPLE_SENDERS_RESULTS = [
     MULTIPLE_SENDERS_20MS_BOTH,
     MULTIPLE_SENDERS_50MS_BOTH,
     MULTIPLE_SENDERS_100MS_BOTH,
     MULTIPLE_SENDERS_300MS_BOTH,
-    MULTIPLE_SENDERS_500MS_BOTH
+    MULTIPLE_SENDERS_500MS_BOTH,
+    MULTIPLE_SENDERS_1000MS_BOTH
+]
+
+AVERAGE_QUEUE_FILL_DATA = [
+    AverageQueueFill(
+        random_key_fragment_selection=15.25,
+        sequence_key_fragment_selection=13.12,
+        adv_interval_ms=20
+    ),
+    AverageQueueFill(
+        random_key_fragment_selection=9.62,
+        sequence_key_fragment_selection=7.38,
+        adv_interval_ms=50
+    ),
+    AverageQueueFill(
+        random_key_fragment_selection=9.13,
+        sequence_key_fragment_selection=5.63,
+        adv_interval_ms=100
+    ),
+    AverageQueueFill(
+        random_key_fragment_selection=9.25,
+        sequence_key_fragment_selection=5.25,
+        adv_interval_ms=300
+    ),
+    AverageQueueFill(
+        random_key_fragment_selection=9.75,
+        sequence_key_fragment_selection=5.00,
+        adv_interval_ms=500
+    ),
+    AverageQueueFill(
+        random_key_fragment_selection=10.75,
+        sequence_key_fragment_selection=5.13,
+        adv_interval_ms=1000
+    ),
+]
+
+MULTIPLE_SENDERS_DYNAMICS = [(
+    DynamicTestData(
+        sender_advertising_interval_min=20,
+        sender_advertising_interval_max=200,
+        sender_advertising_interval_scaler=20,
+        sender_total_pdus_send=2000,
+        is_payload_size_random=True,
+        sender_payload_size=10,
+        packets_received=1694,
+        packets_malformed=0,
+        average_kr_tim_in_s=0.56,
+        average_dq_fill_for_kr=11.77
+    ),
+    DynamicTestData(
+        sender_advertising_interval_min=20,
+        sender_advertising_interval_max=200,
+        sender_advertising_interval_scaler=20,
+        sender_total_pdus_send=2000,
+        is_payload_size_random=True,
+        sender_payload_size=10,
+        packets_received=1756,
+        packets_malformed=0,
+        average_kr_tim_in_s=0.56,
+        average_dq_fill_for_kr=11.77
+    )
+),
+(
+    DynamicTestData(
+        sender_advertising_interval_min=200,
+        sender_advertising_interval_max=1000,
+        sender_advertising_interval_scaler=100,
+        sender_total_pdus_send=2000,
+        sender_payload_size=10,
+        is_payload_size_random=True,
+        packets_received=1899,
+        packets_malformed=0,
+        average_kr_tim_in_s=4.85,
+        average_dq_fill_for_kr=10.12
+    ),
+    DynamicTestData(
+        sender_advertising_interval_min=200,
+        sender_advertising_interval_max=1000,
+        sender_advertising_interval_scaler=100,
+        sender_total_pdus_send=2000,
+        sender_payload_size=10,
+        is_payload_size_random=True,
+        packets_received=1894,
+        packets_malformed=0,
+        average_kr_tim_in_s=4.85,
+        average_dq_fill_for_kr=10.12
+    )
+),
+(
+    DynamicTestData(
+        sender_advertising_interval_min=1000,
+        sender_advertising_interval_max=3000,
+        sender_advertising_interval_scaler=250,
+        sender_total_pdus_send=2000,
+        is_payload_size_random=True,
+        sender_payload_size=10,
+        packets_received=1720,
+        packets_malformed=196,
+        average_kr_tim_in_s=11.08,
+        average_dq_fill_for_kr=10.12
+    ),
+    DynamicTestData(
+        sender_advertising_interval_min=1000,
+        sender_advertising_interval_max=3000,
+        sender_advertising_interval_scaler=250,
+        sender_total_pdus_send=2000,
+        is_payload_size_random=True,
+        sender_payload_size=10,
+        packets_received=1898,
+        packets_malformed=0,
+        average_kr_tim_in_s=11.08,
+        average_dq_fill_for_kr=10.12
+    )
+),
+(
+    DynamicTestData(
+        sender_advertising_interval_min=3000,
+        sender_advertising_interval_max=5000,
+        sender_advertising_interval_scaler=250,
+        sender_total_pdus_send=2000,
+        is_payload_size_random=True,
+        sender_payload_size=10,
+        packets_received=1902,
+        packets_malformed=0,
+        average_kr_tim_in_s=28.32,
+        average_dq_fill_for_kr=10.00
+    ),
+    DynamicTestData(
+        sender_advertising_interval_min=3000,
+        sender_advertising_interval_max=5000,
+        sender_advertising_interval_scaler=250,
+        sender_total_pdus_send=2000,
+        is_payload_size_random=True,
+        sender_payload_size=10,
+        packets_received=1907,
+        packets_malformed=0,
+        average_kr_tim_in_s=28.32,
+        average_dq_fill_for_kr=10.00
+    )
+)
 ]

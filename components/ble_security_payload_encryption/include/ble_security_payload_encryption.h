@@ -6,7 +6,7 @@
 
 bool init_payload_encryption();
 
-bool set_key_replacement_time_in_s(const double time_in_s);
+bool set_key_replacement_pdu_count(const uint32_t count);
 
 int encrypt_payload(uint8_t * payload, size_t payload_size, beacon_pdu_data * encrypted_pdu);
 

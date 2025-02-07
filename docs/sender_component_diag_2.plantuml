@@ -1,0 +1,14 @@
+@startuml
+
+"Interfejs do sterowania transmisją rozgłoszeniową" <-- [Sterownik transmisji rozgłoszeniowej BLE]
+"Interfejs do szyfrowania danych i liczenia HMAC" <-- [Krypto]
+
+component [Silnik szyfrowania i budowania PDU]
+[Silnik szyfrowania i budowania PDU] ..> "Interfejs do szyfrowania danych i liczenia HMAC" : używa
+"Interfejs do budowania i szyfrowania PDU" <--[Silnik szyfrowania i budowania PDU]
+
+component [Nadawca]
+[Nadawca] ..> "Interfejs do sterowania transmisją rozgłoszeniową" : używa
+[Nadawca] ..> "Interfejs do budowania i szyfrowania PDU" : używa
+
+@enduml

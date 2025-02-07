@@ -29,7 +29,7 @@ esp_err_t fill_marker_in_pdu(beacon_pdu_data *bpd);
 
 bool is_pdu_in_beacon_pdu_format(uint8_t *data, size_t size);
 
-void build_nonce(uint8_t nonce[NONCE_SIZE], const beacon_marker* marker, uint16_t key_session_data, uint8_t key_time_interval, uint8_t xor_seed);
+void build_nonce(uint8_t nonce[NONCE_SIZE], const beacon_marker* marker, uint16_t key_session_data, uint8_t xor_seed);
 
 uint16_t produce_key_session_data(uint16_t key_id, uint8_t key_fragment);
 

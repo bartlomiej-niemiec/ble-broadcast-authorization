@@ -43,7 +43,7 @@ static uint8_t *test_payload_buffer_ptr = NULL;
 #define ADV_INT_PLUS_10(x) (int)((x) + (((double)(x)) * (0.1)))
 
 #define TEST_PAYLOAD_BYTES_LEN PAYLOAD_10_BYTES
-#define TEST_ADV_INTERVAL INT_500MS
+#define TEST_ADV_INTERVAL INT_RANDOM
 
 #define ADV_INT_MIN_MS TEST_ADV_INTERVAL
 #define ADV_INT_MAX_MS TEST_ADV_INTERVAL //ADV_INT_PLUS_10(TEST_ADV_INTERVAL)
@@ -136,7 +136,6 @@ uint8_t * get_test_payload_buffer(size_t data_len)
 void app_main(void)
 {
     init_payload_encryption();
-    set_key_replacement_time_in_s( (double) (TEST_ADV_INTERVAL * TEST_NO_PACKETS_TO_KEY_REPLACE * 0.001) );
     bool init_controller = init_broadcast_controller();
 
     //ASSIGN PAYLOAD BUFFER

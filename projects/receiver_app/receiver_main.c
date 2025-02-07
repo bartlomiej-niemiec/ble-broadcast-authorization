@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #define EVENT_START_PDU (1 << 0)
 #define EVENT_END_PDU (1 << 1)
@@ -38,11 +39,62 @@ static esp_ble_scan_params_t default_ble_scan_params = {
 
 static EventGroupHandle_t receiverAppEventGroup;
 
-static esp_bd_addr_t active_test_senders[2] = {
-    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+typedef struct 
+{
+    esp_bd_addr_t address;
+    bool test_end_received;
+} active_test_senders;
+
+static const esp_bd_addr_t zero_address_init = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+static active_test_senders test_senders[2] = {
+    {
+        {0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+        false
+    },
+    {
+        {0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+        false
+    }
 };
-static uint16_t active_test_senders_counter = 0;
+
+bool received_all_test_ends()
+{
+    bool result = false;
+    int count = 0;
+    for (int i = 0; i < SENDERS_NUMBER; i++)
+    {
+        if (test_senders[i].test_end_received == true)
+        {
+            count++;
+        }
+    }
+
+    return count == SENDERS_NUMBER ? true : false;
+}
+
+void check_and_add_test_sender(esp_bd_addr_t mac_address)
+{
+    for (int i = 0; i < SENDERS_NUMBER; i++)
+    {
+        int result = memcmp(test_senders[i].address, mac_address, sizeof(esp_bd_addr_t));
+        int is_zero = memcmp(test_senders[i].address, zero_address_init, sizeof(esp_bd_addr_t));
+        if (result != 0 && is_zero == 0)
+        {
+            memcpy(test_senders[i].address, mac_address, sizeof(esp_bd_addr_t));
+            test_senders[i].test_end_received = true;
+            break;
+        }
+        else if (is_zero != 0 && result == 0)
+        {
+            break;
+        }
+    }
+}
+
+
+static SemaphoreHandle_t sem_active_senders = NULL;
+static volatile uint16_t active_test_senders_counter = 0;
 
 void ble_receiver_main_loop();
 void handle_wait_for_start_pdu(int *state, EventBits_t events);
@@ -53,7 +105,11 @@ void receiver_app_scan_complete_callback(int64_t timestamp_us, uint8_t *data, si
 void app_main(void)
 {
     receiverAppEventGroup = xEventGroupCreate();
+    sem_active_senders = xSemaphoreCreateMutex();
     if (receiverAppEventGroup == NULL)
+        return;
+
+    if (sem_active_senders == NULL)
         return;
 
     int sec_pdu_status = start_up_sec_processing();
@@ -169,21 +225,8 @@ void receiver_app_scan_complete_callback(int64_t timestamp_us, uint8_t *data, si
         }
         else if (is_test_end_pdu(data, data_size) == ESP_OK)
         {
-            for (int i = 0; i < SENDERS_NUMBER; i++)
-            {
-                int result = memcmp(active_test_senders[i], mac_address, sizeof(esp_bd_addr_t));
-                if (result == 0)
-                {
-                    break;
-                }
-                else
-                {
-                    memcpy(active_test_senders[i], mac_address, sizeof(esp_bd_addr_t));
-                    active_test_senders_counter++;
-                }
-            }
-
-            if (active_test_senders_counter == SENDERS_NUMBER)
+            check_and_add_test_sender(mac_address);
+            if (received_all_test_ends() == true)
             {
                 ESP_LOGI(BLE_GAP_LOG_GROUP, "Received test end PDU");
                 xEventGroupSetBits(receiverAppEventGroup, EVENT_END_PDU);

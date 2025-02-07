@@ -47,7 +47,7 @@ esp_err_t fill_marker_in_pdu(beacon_pdu_data *bpd)
     return ESP_OK;
 }
 
-void build_nonce(uint8_t nonce[NONCE_SIZE], const beacon_marker* marker, uint16_t key_session_data, uint8_t key_time_interval, uint8_t xor_seed)
+void build_nonce(uint8_t nonce[NONCE_SIZE], const beacon_marker* marker, uint16_t key_session_data, uint8_t xor_seed)
 {
     memset(nonce, 0, 16);
 
@@ -58,11 +58,8 @@ void build_nonce(uint8_t nonce[NONCE_SIZE], const beacon_marker* marker, uint16_
     nonce[sizeof(beacon_marker)]     = key_session_data & 0xFF;        // Low byte of key ID
     nonce[sizeof(beacon_marker) + 1] = (key_session_data >> 8) & 0xFF; // High byte of key ID
 
-    // Add the key fragment number (1 byte).
-    nonce[sizeof(beacon_marker) + 2] = key_time_interval;
-
     // Add the XOR seed (1 byte).
-    nonce[sizeof(beacon_marker) + 3] = xor_seed;
+    nonce[sizeof(beacon_marker) + 2] = xor_seed;
 
     // The remaining bytes of the nonce are already zero-filled from memset.
 }

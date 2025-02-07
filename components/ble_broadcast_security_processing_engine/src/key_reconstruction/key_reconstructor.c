@@ -18,7 +18,7 @@
 
 #define QUEUE_TIMEOUT_MS 20
 
-#define MAX_KEY_PROCESSES_AT_ONCE 10
+#define MAX_KEY_PROCESSES_AT_ONCE 20
 
 // Event group flags
 #define EVENT_NEW_KEY_FARGMENT_IN_QUEUE (1 << 0)
@@ -82,6 +82,7 @@ void handle_event_new_key_fragment_in_queue()
         counter++;
     }
 
+
     for (int i = 0; i < counter; i++)
     {
         if (is_key_in_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id) == false)
@@ -101,12 +102,15 @@ void handle_event_new_key_fragment_in_queue()
             reconstruct_key_from_key_fragments(st_reconstructor_control.key_collection, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             if (st_reconstructor_control.key_rec_cb != NULL)
             {
-                test_log_key_reconstruction_end(keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
                 st_reconstructor_control.key_rec_cb(keyFragmentBatch[i].key_id, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address);
+                remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             }
-            remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
         }
     }
+
+
+
+
 }
 
 
