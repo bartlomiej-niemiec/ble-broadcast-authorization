@@ -1,0 +1,37 @@
+@startuml
+
+component [Odbiorca]
+
+[Odbiorca] --> [Silnik przetwarzania odebranych PDU] : inicjalizuje
+[Odbiorca] --> [Sterownik transmisji rozgłoszeniowej BLE] : inicjalizuje
+
+
+
+"Interfejs do sterowania transmisją rozgłoszeniową" <-- [Sterownik transmisji rozgłoszeniowej BLE]
+"Interfejs do odszyfrowania danych, fragmentu klucza i liczenia HMAC" <-- [Krypto]
+
+package "Silnik przetwarzania odebranych PDU" {
+    component [Rekonstruktor klucza]
+    component [Procesor PDU]
+
+    database "Baza danych aktywnych nadawców" {
+      folder "Adresy MAC" {
+      }
+      frame "Kolekcja kluczy sesji" {
+      }
+    }
+
+    "Żądanie rekonstrukcji klucza sesji" <-- [Rekonstruktor klucza]
+    [Procesor PDU] ..> "Żądanie rekonstrukcji klucza sesji" : używa
+    [Procesor PDU] ..> "Interfejs do sterowania transmisją rozgłoszeniową" : używa
+    [Procesor PDU] ..> "Interfejs do odszyfrowania danych, fragmentu klucza i liczenia HMAC" : używa
+
+    [Rekonstruktor klucza] ..> "Interfejs do odszyfrowania danych, fragmentu klucza i liczenia HMAC" : używa
+
+    [Procesor PDU] --> [Baza danych aktywnych nadawców] : Pobiera klucz sesji odpowiedniego nadawcy
+    [Rekonstruktor klucza] --> [Baza danych aktywnych nadawców] : Dodaje klucz sesji nadawcy po rekonstrukcji
+
+
+}
+
+@enduml

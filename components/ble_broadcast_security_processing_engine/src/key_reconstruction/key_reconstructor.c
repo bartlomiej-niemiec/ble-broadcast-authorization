@@ -10,15 +10,15 @@
 #include "esp_log.h"
 #include "esp_err.h"
 
-#define KEY_RECONSTRUCTION_TASK_SIZE 4096
-#define RECONSTRUCTOR_TASK_CORE 1
-#define RECONSTRUCTOR_TASK_PRIORITY 10
+#include "test.h"
+
+#include "tasks_data.h"
 
 #define MAX_ELEMENTS_IN_QUEUE 15
 
 #define QUEUE_TIMEOUT_MS 20
 
-#define MAX_KEY_PROCESSES_AT_ONCE 10
+#define MAX_KEY_PROCESSES_AT_ONCE 20
 
 // Event group flags
 #define EVENT_NEW_KEY_FARGMENT_IN_QUEUE (1 << 0)
@@ -32,7 +32,6 @@ typedef struct{
     esp_bd_addr_t consumer_mac_address;
 } __attribute__((aligned(4))) reconstructor_queue_element;
 
-static const char* RECONSTRUCTION_TASK_NAME = "KEY_RECONSTRUCTION_TASK";
 static const char* REC_LOG_GROUP = "RECONSTRUCTION TASK";
 
 typedef struct {
@@ -83,12 +82,13 @@ void handle_event_new_key_fragment_in_queue()
         counter++;
     }
 
+
     for (int i = 0; i < counter; i++)
     {
         if (is_key_in_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id) == false)
         {
             add_new_key_to_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
-            ESP_LOGI(REC_LOG_GROUP, "Adding new key to collection for reconstruction: %i", keyFragmentBatch[i].key_id);
+            test_log_key_reconstruction_start(keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
         }
 
         if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id, keyFragmentBatch[i].key_fragment_no) == false)
@@ -103,10 +103,14 @@ void handle_event_new_key_fragment_in_queue()
             if (st_reconstructor_control.key_rec_cb != NULL)
             {
                 st_reconstructor_control.key_rec_cb(keyFragmentBatch[i].key_id, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address);
+                remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             }
-            remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
         }
     }
+
+
+
+
 }
 
 
@@ -121,12 +125,12 @@ int start_up_key_reconstructor(const uint8_t max_key_reconstrunction_count) {
         {
             BaseType_t  taskCreateResult = xTaskCreatePinnedToCore(
                 reconstructor_main,
-                RECONSTRUCTION_TASK_NAME, 
-                (uint32_t) KEY_RECONSTRUCTION_TASK_SIZE,
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].name, 
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].stackSize,
                 NULL,
-                (UBaseType_t) RECONSTRUCTOR_TASK_PRIORITY,
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].priority,
                 &st_reconstructor_control.xRecontructionKeyTask,
-                RECONSTRUCTOR_TASK_CORE
+                tasksDataArr[KEY_RECONSTRUCTION_TASK].core
                 );
         
             if (taskCreateResult != pdPASS) {
@@ -256,5 +260,9 @@ void process_and_store_key_fragment(reconstructor_queue_element * q_element)
     {
         add_fragment_to_key_management(st_reconstructor_control.key_collection, q_element->consumer_mac_address, q_element->key_id, decrypted_key_fragment_buffer, q_element->key_fragment_no);
         ESP_LOGI(REC_LOG_GROUP, "Successfully reconstructed key fragment no: %i", q_element->key_fragment_no);
+    }
+    else
+    {
+        test_log_bad_structure_packet(q_element->consumer_mac_address);
     }
 }

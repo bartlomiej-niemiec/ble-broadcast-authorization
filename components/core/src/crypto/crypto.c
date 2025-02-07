@@ -6,11 +6,14 @@
 #include "mbedtls/gcm.h"
 #include "mbedtls/md.h"
 #include "esp_random.h"
+#include "esp_log.h"
+
+static const char * crypto_log_group = "CRYPTO";
 
 void generate_128b_key(key_128b * key)
 {
      if (key == NULL) {
-        return; // Handle null pointer gracefully
+        return;
     }
     esp_fill_random( (void *) key->key, sizeof(key->key));
 }
@@ -51,23 +54,22 @@ int aes_ctr_encrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t
 
     if (mbedtls_aes_setkey_enc(&aes, key, 128) != 0) {
         mbedtls_aes_free(&aes);
-        return -1; // Error: Failed to set AES key
+        return -1;
     }
 
-    size_t nc_off = 0; // Offset for the stream block
+    size_t nc_off = 0;
     uint8_t stream_block[16] = {0};
 
     if (mbedtls_aes_crypt_ctr(&aes, length, &nc_off, nonce, stream_block, input, output) != 0) {
         mbedtls_aes_free(&aes);
-        return -2; // Error: AES CTR encryption failed
+        return -2;
     }
 
     mbedtls_aes_free(&aes);
-    return 0; // Success
+    return 0;
 }
 
 int aes_ctr_decrypt_payload(uint8_t *input, size_t length, uint8_t *key, uint8_t *nonce, uint8_t *output) {
-    // Decryption in CTR mode is identical to encryption
     return aes_ctr_encrypt_payload(input, length, key, nonce, output);
 }
 
@@ -99,44 +101,44 @@ void calculate_hmac(const uint8_t *key, size_t key_len, const uint8_t *message, 
     const mbedtls_md_info_t *md_info;
     int ret;
 
-    // Initialize the HMAC context
+    // Inicjalizacja kontekstu mbedtls
     mbedtls_md_init(&ctx);
 
-    // Select the hash function (e.g., SHA-256)
+    // Wybranie funkcji skrótu SHA-256
     md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
     if (md_info == NULL) {
-        printf("Failed to get hash algorithm info\n");
+        ESP_LOGE(crypto_log_group, "Blad przy wybieraniu funkcji skrotu");
         return;
     }
 
-    // Start HMAC with the chosen hash function
-    ret = mbedtls_md_setup(&ctx, md_info, 1); // '1' means HMAC
+    // Ustawienie funkcji skrótu
+    ret = mbedtls_md_setup(&ctx, md_info, 1); // '1' oznacza HMAC
     if (ret != 0) {
-        printf("HMAC setup failed, error code: %d\n", ret);
+        ESP_LOGE(crypto_log_group, "Blad przy konfiguracji HMAC");
         mbedtls_md_free(&ctx);
         return;
     }
 
-    // Set the HMAC key
+    // Ustaw klucz HMAC
     ret = mbedtls_md_hmac_starts(&ctx, key, key_len);
     if (ret != 0) {
-        printf("HMAC starts failed, error code: %d\n", ret);
+        ESP_LOGE(crypto_log_group, "Blad przy rozpoczeciu liczenia HMAC");
         mbedtls_md_free(&ctx);
         return;
     }
 
-    // Add the message
+    // Dodaj wiadomość
     ret = mbedtls_md_hmac_update(&ctx, message, message_len);
     if (ret != 0) {
-        printf("HMAC update failed, error code: %d\n", ret);
+        ESP_LOGE(crypto_log_group, "Blad przy aktualizacji znacznika HMAC");
         mbedtls_md_free(&ctx);
         return;
     }
 
-    // Finalize and write the HMAC output
+    // Zakończ wyliczenia i zapisz HMAC do bufora wyjściowego
     ret = mbedtls_md_hmac_finish(&ctx, output);
     if (ret != 0) {
-        printf("HMAC finish failed, error code: %d\n", ret);
+        ESP_LOGE(crypto_log_group, "Blad przy zakonczeniu zapisywania HMAC do bufora wyjsciowego");
     }
 
     // Free the HMAC context
@@ -144,7 +146,7 @@ void calculate_hmac(const uint8_t *key, size_t key_len, const uint8_t *message, 
 }
 
 void calculate_hmac_of_fragment(uint8_t *key_fragment, uint8_t *encrypted_fragment, uint8_t *hmac_output) {
-    // Calculate HMAC of the encrypted fragment using the decrypted key fragment as the key
+    // Policz HMAC dla zaszyfrowanego fragmentu używająć odszyfrowanego fragmentu jako klucz
     calculate_hmac(key_fragment, KEY_FRAGMENT_SIZE, encrypted_fragment, KEY_FRAGMENT_SIZE, hmac_output);
 }
 

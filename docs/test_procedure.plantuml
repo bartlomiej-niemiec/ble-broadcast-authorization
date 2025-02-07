@@ -1,0 +1,20 @@
+@startuml
+participant Nadawca
+participant Odbiorca
+participant PC
+
+PC -> PC: Uruchom skrypt testowy dla Odbiorcy
+PC -> PC: Uruchom skrypt testowy dla Nadawcy
+PC -> Nadawca: Wyślij wiadomość "start test" na port szeregowy
+Nadawca -> Nadawca: Inicjalizuj zasoby testowe
+Nadawca -> Odbiorca: Rozgłaszaj informacje o rozpoczęciu testu do odbiorcy
+Odbiorca -> Odbiorca: Inicjalizuj zasoby testowe
+Nadawca -> Nadawca: Poczekaj 2-3 sekundy na Odbiorce
+Nadawca -> Odbiorca: Zacznij rozgłaszać PDU
+Nadawca -> Nadawca: Wyślij łącznie 2000 PDU
+Nadawca -> Odbiorca: Rozgłaszaj informację o zakończeniu testu - wszystkie PDU zostały nadane
+Odbiorca -> Odbiorca: Przetwórz pozostałe pakiety
+Nadawca -> PC: Zaloguj wynik testu przez port szeregowy
+Odbiorca -> PC: Zaloguj wynik test przez port szeregowy
+
+@enduml

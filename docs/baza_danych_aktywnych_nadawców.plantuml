@@ -1,0 +1,33 @@
+@startuml
+
+struct "Dane klucza sesji" {
+    - numer sesji
+    - klucz symetryczny
+    - znacznik czasowy
+}
+
+struct "Pamięć podręczna kluczy" {
+    - rozmiar
+    -- przechowuje wiele kluczy --
+    -- usuwa najstarszy klucz, gdy brakuje miejsca --
+}
+
+struct "Nadawca" {
+    - adres MAC
+    - znacznik czasowy ostatniego odebranego PDU
+    - kolejka odroczonych pakietów
+    - liczba pakietów w odroczonej kolejce
+    -- posiada unikalną pamięć podręczną kluczy --
+}
+
+struct "Baza danych nadawców" {
+    - rozmiar
+    - liczba nadawców
+    -- tablica nadawców --
+}
+
+"Baza danych nadawców" o-- "Nadawca" : przechowuje wiele (tablica)
+"Nadawca" o-- "Pamięć podręczna kluczy" : posiada unikalną
+"Pamięć podręczna kluczy" o-- "Dane klucza sesji" : przechowuje wiele
+
+@enduml

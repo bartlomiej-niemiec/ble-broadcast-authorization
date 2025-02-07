@@ -1,0 +1,18 @@
+@startuml
+
+"Packet Received CB" <-- [BLE Broadcast Controller]
+"Decrypt Payload" <-- [Crypto]
+
+package "Sec Processing Engine" {
+    component [Key Reconstructor]
+    component [Dispatcher]
+    "Key reconstruct CB" <-- [Key Reconstructor]
+    [Dispatcher] ..> "Key reconstruct CB" : register
+    [Dispatcher] ..> "Packet Received CB" : register
+    [Dispatcher] ..> "Decrypt Payload" : use
+}
+
+[Dispatcher] ..> "Log" : use
+"Log" <-- [TestResults]
+
+@enduml

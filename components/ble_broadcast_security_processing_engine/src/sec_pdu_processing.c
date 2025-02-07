@@ -6,6 +6,11 @@
 #include "key_reconstructor.h"
 #include "key_cache.h"
 #include "crypto.h"
+#include "test.h"
+
+#include "beacon_test_pdu.h"
+
+#include "tasks_data.h"
 
 //FreeRTOS
 #include "freertos/FreeRTOS.h"
@@ -17,9 +22,6 @@
 #include <limits.h>
 #include <string.h>
 
-#define SEC_PROCESSING_TASK_SIZE 4096
-#define SEC_PROCESSING_TASK_PRIORITY 5
-#define SEC_PROCESSING_TASK_CORE 1
 #define MAX_PROCESSING_QUEUE_ELEMENTS 100
 #define MAX_PROCESSED_PDUS_AT_ONCE 20
 
@@ -27,7 +29,6 @@
 #define QUEUE_TIMEOUT_SYS_TICKS pdMS_TO_TICKS(QUEUE_TIMEOUT_MS)
 
 static const char * SEC_PDU_PROC_LOG = "SEC_PDU_PROCESSING";
-static const char* SEC_PROCESSING_TASK_NAME = "SEC_PDU_PROCESSING TASK";
 
 // Event group flags
 #define EVENT_NEW_PDU (1 << 0)
@@ -68,6 +69,19 @@ static void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd
 static int init_sec_processing_resources();
 static void handle_event_new_pdu();
 static void handle_event_process_deferred_pdus();
+static double get_queue_elements_in_percentage(const uint32_t queue_count, const uint32_t queue_size)
+{
+    return (double)(queue_count / ((double)queue_size));
+}
+
+static void log_processing_queue_size()
+{
+    test_log_processing_queue_percentage(get_queue_elements_in_percentage(uxQueueMessagesWaiting(sec_pdu_st.processingQueue), MAX_PROCESSING_QUEUE_ELEMENTS));
+}
+
+void reset_processing()
+{
+}
 
 bool create_ble_broadcast_pdu_for_dispatcher(ble_broadcast_pdu* pdu, uint8_t *data, size_t size, esp_bd_addr_t mac_address)
 {
@@ -192,7 +206,7 @@ static void handle_event_process_deferred_pdus() {
         }
         else
         {
-            ESP_LOGI(SEC_PROCESSING_TASK_NAME, "BLE Consumer NULL PTR");
+            ESP_LOGI(SEC_PDU_PROC_LOG, "BLE Consumer NULL PTR");
         }
     }
 }
@@ -200,8 +214,14 @@ static void handle_event_process_deferred_pdus() {
 
 // Decrypt PDU and notify callback
 void decrypt_and_notify(const key_128b *key, beacon_pdu_data *pdu, esp_bd_addr_t mac_address) {
+    if (pdu == NULL && mac_address == NULL)
+        return;
     uint8_t output[MAX_PDU_PAYLOAD_SIZE] = {0};
-    decrypt_pdu(key, pdu, output, sizeof(output));
+    decrypt_pdu(key, pdu, output, MAX_PDU_PAYLOAD_SIZE);
+    if (pdu->payload_size > MAX_PDU_PAYLOAD_SIZE)
+    {
+        ESP_LOGE(SEC_PDU_PROC_LOG, "PDU PAYLOAD SIZE %i GREATER THAN MAX SIZE!", (int) pdu->payload_size);
+    }
     notify_pdo_collection_observers(sec_pdu_st.payload_decription_subcribers_collection, output, pdu->payload_size, mac_address);
 }
 
@@ -210,8 +230,8 @@ void decrypt_pdu(const key_128b * const key, beacon_pdu_data * pdu, uint8_t * ou
     if (output_len == MAX_PDU_PAYLOAD_SIZE)
     {
         uint8_t nonce[NONCE_SIZE] = {0};
-        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_session_data, get_key_expected_time_interval_multiplier(pdu->bcd.key_exchange_data), pdu->bcd.xor_seed);
-        aes_ctr_decrypt_payload(pdu->payload, sizeof(pdu->payload_size), key->key, nonce, output);
+        build_nonce(nonce, &(pdu->marker), pdu->bcd.key_session_data, pdu->bcd.xor_seed);
+        aes_ctr_decrypt_payload(pdu->payload, pdu->payload_size, key->key, nonce, output);
     }
 }
 
@@ -250,7 +270,7 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
             }
             else
             {
-                ESP_LOGE(SEC_PROCESSING_TASK_NAME, "DROPPED PACKET!");
+                ESP_LOGE(SEC_PDU_PROC_LOG, "DROPPED PACKET!");
             }
         }
     }
@@ -262,7 +282,6 @@ int process_deferred_queue(ble_consumer * p_ble_consumer)
 int add_to_consumer_deferred_queue(ble_consumer* p_ble_consumer, beacon_pdu_data* pdu)
 {
     BaseType_t stats = pdFAIL;
-    ESP_LOGI(SEC_PDU_PROC_LOG, "Adding data to deffered queue");
     if (sec_pdu_st.is_sec_pdu_processing_initialised == true)
     {
         if (pdu != NULL)
@@ -298,6 +317,15 @@ void key_reconstruction_complete(uint8_t key_id, key_128b * const reconstructed_
                  mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
         return;
     }
+
+    bool key_in_cache_already = is_key_in_cache(p_ble_consumer->context.key_cache, key_id);
+    if (key_in_cache_already == true)
+        return;
+
+
+    test_log_key_reconstruction_end(mac_address, key_id);
+    double queue_percentage = get_queue_elements_in_percentage(p_ble_consumer->context.deferred_queue_count, DEFERRED_QUEUE_SIZE);
+    test_log_deferred_queue_percentage(queue_percentage, p_ble_consumer->mac_address_arr);
 
     // Attempt to add the reconstructed key to the cache
     int status = add_key_to_cache(p_ble_consumer->context.key_cache, reconstructed_key, key_id);
@@ -387,7 +415,7 @@ int start_up_sec_processing()
 
     if (status == 0)
     {
-        int key_reconstructor_status = start_up_key_reconstructor(MAX_BLE_CONSUMERS * 2);
+        int key_reconstructor_status = start_up_key_reconstructor(MAX_BLE_CONSUMERS * 10);
         if (key_reconstructor_status != 0)
         {
             status = -3;
@@ -405,12 +433,12 @@ int start_up_sec_processing()
         {
             BaseType_t  taskCreateResult = xTaskCreatePinnedToCore(
                 sec_processing_main,
-                SEC_PROCESSING_TASK_NAME, 
-                (uint32_t) SEC_PROCESSING_TASK_SIZE,
+                tasksDataArr[SEC_PDU_PROCESSING].name, 
+                tasksDataArr[SEC_PDU_PROCESSING].stackSize,
                 NULL,
-                (UBaseType_t) SEC_PROCESSING_TASK_PRIORITY,
+                tasksDataArr[SEC_PDU_PROCESSING].priority,
                 &(sec_pdu_st.xSecProcessingTask),
-                SEC_PROCESSING_TASK_CORE
+                tasksDataArr[SEC_PDU_PROCESSING].core
                 );
         
             if (taskCreateResult != pdPASS)
@@ -457,14 +485,20 @@ void scan_complete_callback(int64_t timestamp_us, uint8_t *data, size_t data_siz
     {
         if (is_pdu_in_beacon_pdu_format(data, data_size))
         {
-            ESP_LOGI(SEC_PDU_PROC_LOG, "Received PDU of tota len: %i", (int) data_size);
             beacon_pdu_data pdu = {0};
             size_t payload_size = get_payload_size_from_pdu(data_size);
             memcpy(&pdu.marker, data, sizeof(beacon_marker));
             memcpy(&pdu.bcd, &data[sizeof(beacon_marker)], sizeof(beacon_crypto_data));
-            memcpy(&pdu.payload, &data[sizeof(beacon_marker) + sizeof(beacon_crypto_data)], payload_size);
+            memcpy(pdu.payload, &data[sizeof(beacon_marker) + sizeof(beacon_crypto_data)], payload_size);
             pdu.payload_size = payload_size;
             enqueue_pdu_for_processing(&pdu, mac_address);
+        }
+        else
+        {
+            if (is_pdu_from_expected_sender(mac_address) == true && is_test_pdu(data, data_size) != false)
+            {
+                test_log_bad_structure_packet(mac_address);
+            }
         }
     }
 }

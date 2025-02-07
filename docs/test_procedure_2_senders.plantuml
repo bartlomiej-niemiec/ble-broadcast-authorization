@@ -1,0 +1,31 @@
+@startuml
+participant "Nadawca A"
+participant "Nadawca B"
+participant Odbiorca
+participant PC
+
+Odbiorca -> Odbiorca : Uruchom
+"Nadawca B" -> "Nadawca B" : Uruchom
+"Nadawca A" -> "Nadawca A" : Uruchom
+PC -> PC : Uruchom skrypt testowy dla odbiorcy
+PC -> PC : Uruchom skrypt testowy dla nadawcy
+"Nadawca B" -> "Nadawca B": Inicjalizuj zasoby testowe
+"Nadawca B" -> "Nadawca B": Czekaj kilka sekund
+"Nadawca B" -> Odbiorca: Rozgłaszaj informację o rozpoczęciu testu
+Odbiorca -> Odbiorca: Inicjalizuj zasoby testowe
+PC -> "Nadawca A": Wyślij wiadomość "start test" na port szeregowy
+"Nadawca B" -> Odbiorca: Zacznij rozgłaszac PDU
+"Nadawca B" -> Odbiorca: Wyślij 200 PDU
+"Nadawca A" -> "Nadawca A": Inicjalizuj zasoby testowe
+"Nadawca A" -> Odbiorca: Rozgłaszaj informację o rozpoczęciu testu
+"Nadawca A" -> "Nadawca A": Czekaj kilka sekund
+"Nadawca A" -> Odbiorca: Zacznij rozgłaszac PDU
+"Nadawca A" -> Odbiorca: Wyślij 200 PDU
+"Nadawca B" -> Odbiorca: Rozgłaszaj informację o zakończeniu testu
+Odbiorca -> Odbiorca: Poczekaj na informację o zakończeniu testu od drugiego nadawcy
+"Nadawca A" -> Odbiorca: Rozgłaszaj informację o zakończeniu testu
+Odbiorca -> Odbiorca: Zakończ test
+Odbiorca -> PC: Zaloguj wynik testu przez port szeregowy
+"Nadawca A" -> PC: Zaloguj wynik testu przez port szeregowy
+
+@enduml
