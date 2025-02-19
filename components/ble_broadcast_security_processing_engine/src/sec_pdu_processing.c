@@ -40,6 +40,8 @@ static const char * SEC_PDU_PROC_LOG = "SEC_PDU_PROCESSING";
 
 #define MAIN_PROCESSING_QUEUE_SIZE
 
+
+
 typedef struct {
     TaskHandle_t xSecProcessingTask;
     QueueHandle_t processingQueue;
@@ -435,7 +437,7 @@ int init_sec_processing_resources()
         ESP_LOGE(SEC_PDU_PROC_LOG, "ble consumer collection create failed!");
     }
 
-    sec_pdu_st.payload_decription_subcribers_collection = create_pdo_collection(MAX_OBSERVERS);
+    sec_pdu_st.payload_decription_subcribers_collection = create_pdo_collection(MAX_PDU_RECEIVE_OBSERVERS);
     if (sec_pdu_st.consumer_collection == NULL)
     {
         status = -4;

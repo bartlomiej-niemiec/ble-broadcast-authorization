@@ -13,24 +13,19 @@
 #include <limits.h>
 
 #include "test.h"
-
-#define KEY_REPLACEMENT_TIMEOUT_S 30
-#define KEY_REPLACEMENT_TIMEOUT_US(s) ((s) * (1000000))
+#include "config.h"
 
 static const char* MSG_SENDER_LOG_GROUP = "MSG_ENCRYPTOR";
 static key_128b pre_shared_key;
 static key_splitted splitted_pre_shared_key;
 static key_128b next_pre_shared_key; 
 static key_splitted next_splitted_pre_shared_key;
-static volatile bool is_key_replace_request_active = false;
 static uint16_t key_id;
-static uint8_t key_time_interval_multiplier;
 static uint8_t encrypt_payload_arr[MAX_PDU_PAYLOAD_SIZE] = {0};
 static  esp_timer_handle_t key_replacement_timer;
 void key_replacement_cb();
 
-static volatile uint16_t KEY_REPLACE_TIME_IN_S;
-static volatile uint32_t key_replacement_packet_counter = 200;
+static volatile uint32_t key_replacement_packet_counter = TEST_NO_PACKETS_TO_KEY_REPLACE;
 static volatile uint64_t encrypted_packet_counter = 0;
 
 
@@ -49,8 +44,6 @@ void key_replacement_cb()
     generate_128b_key(&next_pre_shared_key);
     ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(next_pre_shared_key));
     split_128b_key_to_fragment(&next_pre_shared_key, &next_splitted_pre_shared_key);
-    is_key_replace_request_active = true;
-    test_log_sender_key_replace_time_in_s(KEY_REPLACEMENT_TIMEOUT_US(KEY_REPLACE_TIME_IN_S));
     memcpy(&pre_shared_key, &next_pre_shared_key, sizeof(pre_shared_key));
     memcpy(&splitted_pre_shared_key, &next_splitted_pre_shared_key, sizeof(pre_shared_key));
 }
@@ -73,18 +66,12 @@ uint16_t get_next_key_fragment()
     return return_fragment_no; 
 }
 
-uint8_t get_random_time_interval_value()
-{
-    return (esp_random() % MAX_TIME_INTERVAL_MULTIPLIER);
-}
-
 bool init_payload_encryption()
 {
     static bool isInitialized = false;
     if (isInitialized == false)
     {
         key_id = get_random_key_id();
-        key_time_interval_multiplier = get_random_time_interval_value();
         generate_128b_key(&pre_shared_key);
         ESP_LOG_BUFFER_HEX("New key: ", next_pre_shared_key.key, sizeof(pre_shared_key));
         split_128b_key_to_fragment(&pre_shared_key, &splitted_pre_shared_key);

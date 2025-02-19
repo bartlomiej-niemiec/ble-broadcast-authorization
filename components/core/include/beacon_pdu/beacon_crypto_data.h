@@ -6,7 +6,6 @@
 
 #define PDU_INTERVAL_RESOLUTION_MS 50
 #define MAX_TIME_INTERVAL_MULTIPLIER 16
-#define KEY_EXCHANGE_COUNTER_TARGET 15
 
 typedef struct {            
     uint16_t key_session_data;                    // unique ID for Symmetric Key

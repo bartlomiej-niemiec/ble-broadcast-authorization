@@ -6,9 +6,11 @@
 #include "beacon_pdu_data.h"
 #include <stdint.h>
 #include <stddef.h>
+#include "config.h"
 
-#define MAX_OBSERVERS 2
-#define MAX_BLE_CONSUMERS 2
+#define MAX_PDU_RECEIVE_OBSERVERS 2
+#define MAX_BLE_CONSUMERS MAX_BLE_BROADCASTERS
+
 
 typedef struct{
     uint8_t data[MAX_GAP_DATA_LEN];

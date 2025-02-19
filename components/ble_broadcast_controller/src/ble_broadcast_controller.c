@@ -18,18 +18,11 @@
 
 #include "tasks_data.h"
 
-#define EVENT_QUEUE_SIZE 10
-#define MINUS_INTERVAL_TOLERANCE_MS 10
-#define PLUS_INTERVAL_TOLERANCE_MS 10
-
 #define SEMAPHORE_TIMEOUT_MS 20
 #define QUEUE_TIMEOUT_MS 20
 
 #define N_CONST 0.625
 #define MS_TO_N_CONVERTION(MS) ((uint16_t)((MS) / (N_CONST)))
-
-#define ADV_INT_MIN_MS 100
-#define ADV_INT_MAX_MS 110
 
 #define MAX_SCAN_COMPLETE_CB 2
 
