@@ -108,11 +108,13 @@ void data_set_success_cb()
 
 void packet_send_timeout_timer(void *arg)
 {
+    // Sprawdź czy wysłanono wszystkie pakiety
     if (packet_send_counter >= NO_PACKET_TO_SEND)
     {
-        return;  // Stop execution if all packets are sent
+        return;
     }
 
+    // Zinkrementuj licznik i sprawdź, który typ pakietu należy wysłać
     bool result;
     if (get_and_increment_pdu_send_counter() == PDU_TO_KEY_FRAGMENT_RATIO)
     {
@@ -123,12 +125,13 @@ void packet_send_timeout_timer(void *arg)
         result = encrypt_new_payload();
     }
 
-    uint64_t delay_us = (uint64_t) (get_time_interval_for_current_session_key() * 1000); // Convert to microseconds
+    // Pobierz interwał nadawania w mikrosekundach
+    uint64_t delay_us = (uint64_t) (get_time_interval_for_current_session_key() * 1000);
 
-    // Stop the timer before restarting it
+    //zatrzymaj timer
     esp_timer_stop(xPacketSendTimeoutTimer);
 
-    // Schedule next execution
+    // uruchom timer z czasem interwału nadawnia
     esp_timer_start_once(xPacketSendTimeoutTimer, delay_us);
 }
 

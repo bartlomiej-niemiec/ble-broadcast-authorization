@@ -686,10 +686,10 @@ IMPROVED_ALGORITHM_MULTIPLE_SENDERS_DYNAMICS = [(
         sender_total_pdus_send=2000,
         is_payload_size_random=True,
         sender_payload_size=10,
-        packets_received=2000,
+        packets_received=1877,
         packets_malformed=0,
-        average_kr_tim_in_s=28.32,
-        average_dq_fill_for_kr=10.00
+        average_kr_tim_in_s=64.40,
+        average_dq_fill_for_kr=18.12
     ),
     DynamicTestData(
         sender_advertising_interval_min=3000,
@@ -698,10 +698,10 @@ IMPROVED_ALGORITHM_MULTIPLE_SENDERS_DYNAMICS = [(
         sender_total_pdus_send=2000,
         is_payload_size_random=True,
         sender_payload_size=10,
-        packets_received=2000,
+        packets_received=1888,
         packets_malformed=0,
-        average_kr_tim_in_s=28.32,
-        average_dq_fill_for_kr=10.00
+        average_kr_tim_in_s=59.41,
+        average_dq_fill_for_kr=16.25
     )
 )
 ]

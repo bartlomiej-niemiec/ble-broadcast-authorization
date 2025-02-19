@@ -172,13 +172,14 @@ void adv_authorize_main(void *arg)
     const uint32_t DELAY_TICKS = pdMS_TO_TICKS(20);
     while(1)
     {
-        // Wait for events: either a new PDU or key reconstruction completion
+        // Pętla zdarzeń – oczekiwanie na zdarzenie autoryzacji pakietów
         EventBits_t events = xEventGroupWaitBits(ao_control_structure.eventGroup,
                 EVENT_AUTHORIZE_PACKETS,
                 pdTRUE, pdFALSE, portMAX_DELAY);
 
         if (events &EVENT_AUTHORIZE_PACKETS)
         {
+            // Przetwórz kolejki aktywnych nadawców
             for (int i = 0; i < MAX_BLE_CONSUMERS; i++)
             {
                 if (ao_control_structure.consumers[i].active == true)
@@ -194,6 +195,8 @@ void adv_authorize_main(void *arg)
 
 void process_authorization_for_consumer(const uint8_t consumer_index)
 {
+    // Wyciągnij z kolejki oczekujące pakiety do autoryzacji
+    // Maksymalnie przetwórz liczbę elementów zdefiniowaną przez stała "MAX_PDU_PROCESS_PER_CONSUMER"
     scan_pdu pdus[MAX_PDU_PROCESS_PER_CONSUMER] = {0};
     int batchCount = 0;
     while (batchCount < MAX_PDU_PROCESS_PER_CONSUMER &&
@@ -203,35 +206,43 @@ void process_authorization_for_consumer(const uint8_t consumer_index)
     }
 
     int start_index = 1;
-    scan_pdu * last_scan_pdu = NULL;
+    scan_pdu * last_scan_pdu = NULL; // Wskaźnik na pakiet aktualnie autoryzowany
     if (ao_control_structure.consumers[consumer_index].last_processed_pdu.timestamp_us != 0)
     {
+        // Jeżeli wcześniej żaden pakiet nie był autoryzowany dla tego nadawcy
+        // Weź pierwszy oczekujący pakiet
         start_index = 0;
         last_scan_pdu = &(ao_control_structure.consumers[consumer_index].last_processed_pdu);
     }
     else
     {
+        // Jeżeli wcześniej jakikolwiek pakiet autoryzowany dla tego nadawcy
+        // Weź pakiet, na którym skończyło się ostatnie przetwarzanie
         last_scan_pdu = &pdus[0];
     }
 
     for (int i = start_index; i < batchCount; i++)
     {
+        // Sprawdź czy porównywane pakiety są z tej samej sesji
         if (pdus[i].key_id == last_scan_pdu->key_id)
         {
+            // Oblicz czas, który upłynął między odebranymi pakietami w ms
             int64_t timestamp_diff_ms = ((pdus[i].timestamp_us - last_scan_pdu->timestamp_us) / 1000);
+
+            // Wyznacz interwał rozgłaszania z ID klucza
             uint32_t adv_time_for_key_id = get_adv_interval_from_key_id(pdus[i].key_id);
+
+            // Wyznacz jaki czas w ms powinien upłynąć pomiędzy pakietami
             int64_t timestamp_diff_from_pdus = (int64_t) ((pdus[i].pdu_no - last_scan_pdu->pdu_no) * adv_time_for_key_id);
-            
+
+            // Oblicz różnice między czasem, który powinien upłynąć, a tym z znacznikiów czasowych
             int difference_timestamps = (int) (timestamp_diff_from_pdus - timestamp_diff_ms);
 
-            // ESP_LOGI(ADV_AUTHORIZE_LOG, "Elapsed time ms = %i", (int) timestamp_diff_ms);
-            // ESP_LOGI(ADV_AUTHORIZE_LOG, "Approx elapsed time ms = %i", (int) timestamp_diff_from_pdus);
-            // ESP_LOGI(ADV_AUTHORIZE_LOG, "CURR Packet PDU NO = %i, PREV PDU NO = %i", (int) pdus[i].pdu_no, (int) last_scan_pdu->pdu_no);
-            // ESP_LOGI(ADV_AUTHORIZE_LOG, "Tim Diff = %i", difference_timestamps);
-
+            // Oblicz tolerancję
             const int PLUS_TOLERANCE_WINDOW_MS = get_tolerance_window_based_on_adv_interval(adv_time_for_key_id);
             const int MINUS_TOLERANCE_WINDOW_MS = PLUS_TOLERANCE_WINDOW_MS * -1;
 
+            // Sprawdź czy czas, który upłynął jest w zakresie błędu
             if ((difference_timestamps <= PLUS_TOLERANCE_WINDOW_MS) && (difference_timestamps >=  MINUS_TOLERANCE_WINDOW_MS))
             {
                 enqueue_pdu_for_processing(last_scan_pdu->data, last_scan_pdu->size, ao_control_structure.consumers[consumer_index].consumer_addr);
@@ -245,6 +256,7 @@ void process_authorization_for_consumer(const uint8_t consumer_index)
         last_scan_pdu = &pdus[i];
     }
 
+    // Zapisz aktualny pakiet jako następny do porównania/autoryzacji
     save_last_scanned_pdu(&(ao_control_structure.consumers[consumer_index].last_processed_pdu), last_scan_pdu);
 
 }

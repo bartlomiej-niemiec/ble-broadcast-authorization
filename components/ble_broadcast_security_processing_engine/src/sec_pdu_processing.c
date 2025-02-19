@@ -118,15 +118,17 @@ void sec_processing_main(void *arg)
 
     while (1)
     {
-        // Wait for events: either a new PDU or key reconstruction completion
+        // Pętla zdarzeń - oczekiwanie na nowe zdarzenie
         EventBits_t events = xEventGroupWaitBits(sec_pdu_st.eventGroup,
                                                  EVENT_NEW_PDU | EVENT_PROCESS_DEFFERRED_PDUS,
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
 
+        // Obsługa zdarzenia przyjścia nowego pakietu do przetworzenia
         if (events & EVENT_NEW_PDU) {
             handle_event_new_pdu();
         }
 
+        // Obsługa zdarzenia przetworzenia kolejki odroczonych pakietów
         if (events & EVENT_PROCESS_DEFFERRED_PDUS)
         {
             handle_event_process_deferred_pdus();

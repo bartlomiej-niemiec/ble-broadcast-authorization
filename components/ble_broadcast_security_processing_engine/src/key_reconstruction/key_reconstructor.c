@@ -61,11 +61,12 @@ void reconstructor_main(void *arg)
     ESP_LOGI(REC_LOG_GROUP, "Starting up key reconstructor task");
     while (1)
     {
-         // Wait for events: either a new PDU or key reconstruction completion
+        // Pętla zdarzeń - oczekiwanie na zdarzenie przyjścia nowego fragmentu do zdekodowania
         EventBits_t events = xEventGroupWaitBits(st_reconstructor_control.eventGroup,
                                                  EVENT_NEW_KEY_FARGMENT_IN_QUEUE,
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
 
+        // Obsługa zdarzenia dekodowania fragmentu klucza
         if (events & EVENT_NEW_KEY_FARGMENT_IN_QUEUE) {
             handle_event_new_key_fragment_in_queue();
         }
@@ -75,6 +76,8 @@ void reconstructor_main(void *arg)
 
 void handle_event_new_key_fragment_in_queue()
 {
+    // Wyciągnij z kolejki oczekujące fragmenty klucza do przetworzenia
+    // Maksymalnie przetwórz liczbę elementów zdefiniowaną przez stała "MAX_KEY_PROCESSES_AT_ONCE"
     reconstructor_queue_element keyFragmentBatch[MAX_KEY_PROCESSES_AT_ONCE];
     int counter = 0;
     while (counter < MAX_KEY_PROCESSES_AT_ONCE && xQueueReceive(st_reconstructor_control.xQueueKeyReconstruction, ( void * ) &keyFragmentBatch[counter], QUEUE_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE)
@@ -85,14 +88,18 @@ void handle_event_new_key_fragment_in_queue()
 
     for (int i = 0; i < counter; i++)
     {
+        // Sprawdź czy klucz z ID z pakietu istnieje dla nadawcy
         if (is_key_in_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id) == false)
         {
+            // Dodaj nowy klucz do kolekcji
             add_new_key_to_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             test_log_key_reconstruction_start(keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
         }
 
+        // Sprawdz czy fragment klucza został już odszyfrowanyy
         if (is_key_fragment_decrypted(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id, keyFragmentBatch[i].key_fragment_no) == false)
         {
+            // Odszyfruj fragment klucza i zapisz go
             process_and_store_key_fragment(&keyFragmentBatch[i]);
         }
         else
@@ -100,20 +107,20 @@ void handle_event_new_key_fragment_in_queue()
             test_log_packet_received_key_fragment_already_decoded(keyFragmentBatch[i].consumer_mac_address);
         }
 
+        // Sprawdz czy caly klucz jest dostepny - zostały zebrane wszystkie fragmenty
         if (is_key_available(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id) == true)
         {
             key_128b reconstructed_key = {0};
+            // Dokonaj rekonstrukcji klucza - poskładaj fragmenty w pełen klucz
             reconstruct_key_from_key_fragments(st_reconstructor_control.key_collection, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             if (st_reconstructor_control.key_rec_cb != NULL)
             {
+                // Zawołaj funkcję zwrotną klienta powiadamiając, że dany klucz dla danego nadawcy został zrekonstruowany
                 st_reconstructor_control.key_rec_cb(keyFragmentBatch[i].key_id, &reconstructed_key, keyFragmentBatch[i].consumer_mac_address);
                 remove_key_from_collection(st_reconstructor_control.key_collection, keyFragmentBatch[i].consumer_mac_address, keyFragmentBatch[i].key_id);
             }
         }
     }
-
-
-
 
 }
 

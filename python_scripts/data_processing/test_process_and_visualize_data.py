@@ -576,72 +576,73 @@ def print_packet_loss_tables_multiple_senders(packet_loss_data):
 
 
 if __name__ == "__main__":
-    # plot_packet_losses_dynamics_multiple_senders(results.MULTIPLE_SENDERS_DYNAMICS)
-    # print_packet_loss_tables_dynamic_multiple(results.MULTIPLE_SENDERS_DYNAMICS)
-    # #GET PACKET LOSSES
-    # PACKET_LOSS_4_BYTES, PACKET_LOSS_10_BYTES, PACKET_LOSS_16_BYTES = get_packet_losses()
-    #
-    # plot_packet_losses(PACKET_LOSS_4_BYTES, PACKET_LOSS_10_BYTES, PACKET_LOSS_16_BYTES)
-    #
-    # # GET AVERAGE RECONSTRUCTION TIME
-    # AVERAGE_RECONSTRUCTION_TIME_FOR_20MS = get_average_reconstruction_time_for_interval(20)
-    # AVERAGE_RECONSTRUCTION_TIME_FOR_50MS = get_average_reconstruction_time_for_interval(50)
-    # AVERAGE_RECONSTRUCTION_TIME_FOR_100MS = get_average_reconstruction_time_for_interval(100)
-    # AVERAGE_RECONSTRUCTION_TIME_FOR_300MS = get_average_reconstruction_time_for_interval(300)
-    # AVERAGE_RECONSTRUCTION_TIME_FOR_500MS = get_average_reconstruction_time_for_interval(500)
-    # AVERAGE_RECONSTRUCTION_TIME_FOR_1000MS = get_average_reconstruction_time_for_interval(1000)
-    #
-    # plot_key_reconstruction_average_time(
-    #     AVERAGE_RECONSTRUCTION_TIME_FOR_20MS,
-    #     AVERAGE_RECONSTRUCTION_TIME_FOR_50MS,
-    #     AVERAGE_RECONSTRUCTION_TIME_FOR_100MS,
-    #     AVERAGE_RECONSTRUCTION_TIME_FOR_300MS,
-    #     AVERAGE_RECONSTRUCTION_TIME_FOR_500MS,
-    #     AVERAGE_RECONSTRUCTION_TIME_FOR_1000MS
-    # )
-    #
-    # # GET AVERAGE DQ FILL
-    # AVERAGE_DQ_FILL_FOR_20MS = get_average_dq_fill_for_interval(20)
-    # AVERAGE_DQ_FILL_FOR_50MS = get_average_dq_fill_for_interval(50)
-    # AVERAGE_DQ_FILL_FOR_100MS = get_average_dq_fill_for_interval(100)
-    # AVERAGE_DQ_FILL_FOR_300MS = get_average_dq_fill_for_interval(300)
-    # AVERAGE_DQ_FILL_FOR_500MS = get_average_dq_fill_for_interval(500)
-    # AVERAGE_DQ_FILL_FOR_1000MS = get_average_dq_fill_for_interval(1000)
-    #
-    # plot_dq_fill_percentage(
-    #     AVERAGE_DQ_FILL_FOR_20MS,
-    #     AVERAGE_DQ_FILL_FOR_50MS,
-    #     AVERAGE_DQ_FILL_FOR_100MS,
-    #     AVERAGE_DQ_FILL_FOR_300MS,
-    #     AVERAGE_DQ_FILL_FOR_500MS,
-    #     AVERAGE_DQ_FILL_FOR_1000MS
-    # )
-    #
-    # dq_avg = [
-    #     statistics.mean(AVERAGE_DQ_FILL_FOR_20MS),
-    #     statistics.mean(AVERAGE_DQ_FILL_FOR_50MS),
-    #     statistics.mean(AVERAGE_DQ_FILL_FOR_100MS),
-    #     statistics.mean(AVERAGE_DQ_FILL_FOR_300MS),
-    #     statistics.mean(AVERAGE_DQ_FILL_FOR_500MS),
-    #     statistics.mean(AVERAGE_DQ_FILL_FOR_1000MS)
-    # ]
-    #
-    # plot_dq_fill_percentage_one_plot(dq_avg)
-    #
-    # plot_dq_fill_strategies(results.AVERAGE_QUEUE_FILL_DATA)
-    #
-    # print("============PACKET LOSS STATIC============")
-    # print_packet_loss_tables(results.TEST_DATA_4_BYTES, results.TEST_DATA_10_BYTES, results.TEST_DATA_16_BYTES)
-    #
-    # plot_packet_losses_dynamics(results.DYNAMIC_TESTS_RESULTS)
-    #
-    # plot_packet_losses_multiple_senders(results.MULTIPLE_SENDERS_RESULTS)
-    #
-    # print("============PACKET LOSS DYNAMIC============")
-    # print_packet_loss_tables_dynamic(results.DYNAMIC_TESTS_RESULTS)
-    # print("============PACKET LOSS MULTIPLE RECEIVERS============")
-    # print_packet_loss_tables_multiple_senders(results.MULTIPLE_SENDERS_RESULTS)
+    
+    #GET PACKET LOSSES
+    PACKET_LOSS_4_BYTES, PACKET_LOSS_10_BYTES, PACKET_LOSS_16_BYTES = get_packet_losses()
+    
+    plot_packet_losses(PACKET_LOSS_4_BYTES, PACKET_LOSS_10_BYTES, PACKET_LOSS_16_BYTES)
+    
+    # GET AVERAGE RECONSTRUCTION TIME
+    AVERAGE_RECONSTRUCTION_TIME_FOR_20MS = get_average_reconstruction_time_for_interval(20)
+    AVERAGE_RECONSTRUCTION_TIME_FOR_50MS = get_average_reconstruction_time_for_interval(50)
+    AVERAGE_RECONSTRUCTION_TIME_FOR_100MS = get_average_reconstruction_time_for_interval(100)
+    AVERAGE_RECONSTRUCTION_TIME_FOR_300MS = get_average_reconstruction_time_for_interval(300)
+    AVERAGE_RECONSTRUCTION_TIME_FOR_500MS = get_average_reconstruction_time_for_interval(500)
+    AVERAGE_RECONSTRUCTION_TIME_FOR_1000MS = get_average_reconstruction_time_for_interval(1000)
+    
+    plot_key_reconstruction_average_time(
+        AVERAGE_RECONSTRUCTION_TIME_FOR_20MS,
+        AVERAGE_RECONSTRUCTION_TIME_FOR_50MS,
+        AVERAGE_RECONSTRUCTION_TIME_FOR_100MS,
+        AVERAGE_RECONSTRUCTION_TIME_FOR_300MS,
+        AVERAGE_RECONSTRUCTION_TIME_FOR_500MS,
+        AVERAGE_RECONSTRUCTION_TIME_FOR_1000MS
+    )
+    
+    # GET AVERAGE DQ FILL
+    AVERAGE_DQ_FILL_FOR_20MS = get_average_dq_fill_for_interval(20)
+    AVERAGE_DQ_FILL_FOR_50MS = get_average_dq_fill_for_interval(50)
+    AVERAGE_DQ_FILL_FOR_100MS = get_average_dq_fill_for_interval(100)
+    AVERAGE_DQ_FILL_FOR_300MS = get_average_dq_fill_for_interval(300)
+    AVERAGE_DQ_FILL_FOR_500MS = get_average_dq_fill_for_interval(500)
+    AVERAGE_DQ_FILL_FOR_1000MS = get_average_dq_fill_for_interval(1000)
+    
+    plot_dq_fill_percentage(
+        AVERAGE_DQ_FILL_FOR_20MS,
+        AVERAGE_DQ_FILL_FOR_50MS,
+        AVERAGE_DQ_FILL_FOR_100MS,
+        AVERAGE_DQ_FILL_FOR_300MS,
+        AVERAGE_DQ_FILL_FOR_500MS,
+        AVERAGE_DQ_FILL_FOR_1000MS
+    )
+    
+    dq_avg = [
+        statistics.mean(AVERAGE_DQ_FILL_FOR_20MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_50MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_100MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_300MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_500MS),
+        statistics.mean(AVERAGE_DQ_FILL_FOR_1000MS)
+    ]
+    
+    plot_dq_fill_percentage_one_plot(dq_avg)
+    
+    plot_dq_fill_strategies(results.AVERAGE_QUEUE_FILL_DATA)
+    
+    print("============PACKET LOSS STATIC============")
+    print_packet_loss_tables(results.TEST_DATA_4_BYTES, results.TEST_DATA_10_BYTES, results.TEST_DATA_16_BYTES)
+    
+    plot_packet_losses_dynamics(results.DYNAMIC_TESTS_RESULTS)
+    
+    plot_packet_losses_multiple_senders(results.MULTIPLE_SENDERS_RESULTS)
+    
+    print("============PACKET LOSS DYNAMIC============")
+    print_packet_loss_tables_dynamic(results.DYNAMIC_TESTS_RESULTS)
+    print("============PACKET LOSS DYNAMIC 2 ============")
+    print_packet_loss_tables_dynamic(results.IMPROVED_ALGORITHM_DYNAMIC_TESTS_RESULTS)
 
-    plot_improved_algorithm_packet_losses_dynamics(results.IMPROVED_ALGORITHM_DYNAMIC_TESTS_RESULTS)
 
-    plot_improved_algorithm_packet_losses_dynamics_multiple_senders(results.IMPROVED_ALGORITHM_MULTIPLE_SENDERS_DYNAMICS)
+    print("============PACKET LOSS MULTIPLE RECEIVERS============")
+    print_packet_loss_tables_multiple_senders(results.MULTIPLE_SENDERS_RESULTS)
+    print("============PACKET LOSS MULTIPLE RECEIVERS 2============")
+    print_packet_loss_tables_dynamic_multiple(results.IMPROVED_ALGORITHM_MULTIPLE_SENDERS_DYNAMICS)
