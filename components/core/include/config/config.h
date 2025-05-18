@@ -1,0 +1,17 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include <stdint.h>
+#include "test.h"
+
+// BROADCASTER CONFIG
+#define NO_PACKET_TO_SEND 2000
+#define TEST_NO_PACKETS_TO_KEY_REPLACE 200
+#define PDU_TO_KEY_FRAGMENT_RATIO 3
+#define TEST_PAYLOAD_BYTES_LEN PAYLOAD_10_BYTES
+
+// OBSERVER CONFIG
+#define SENDERS_NUMBER 2
+#define MAX_BLE_BROADCASTERS 2
+
+#endif

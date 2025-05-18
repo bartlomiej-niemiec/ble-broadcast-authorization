@@ -11,6 +11,7 @@
 
 #include "pc_serial_communication.h"
 #include "beacon_test_pdu.h"
+#include "config.h"
 
 #include "test.h"
 
@@ -19,8 +20,6 @@
 #include <stdatomic.h>
 
 #define MAX_SERIAL_MSG_SIZE 30
-
-#define TEST_DURATION_IN_S 180
 
 typedef enum {
     SENDER_WAIT_FOR_START_CMD,
@@ -36,17 +35,17 @@ static char PC_SERIAL_BUFFER[MAX_SERIAL_MSG_SIZE] = {0};
 static const char* START_CMD_SERIAL = "START_TEST";
 static SemaphoreHandle_t xStartCmdReceived;
 static atomic_int EndTest = 0;
-static esp_timer_handle_t xTestTimeoutTimer;
-static uint64_t testTimeoutUs = TEST_DURATION_IN_S * 1e6;
+static esp_timer_handle_t xPacketSendTimeoutTimer;
 static uint8_t *test_payload_buffer_ptr = NULL;
 
 #define ADV_INT_PLUS_10(x) (int)((x) + (((double)(x)) * (0.1)))
 
-#define TEST_PAYLOAD_BYTES_LEN PAYLOAD_10_BYTES
 #define TEST_ADV_INTERVAL INT_RANDOM
 
+#define TIMER_FIRST_START_TIME_US 2000000
+
 #define ADV_INT_MIN_MS TEST_ADV_INTERVAL
-#define ADV_INT_MAX_MS TEST_ADV_INTERVAL //ADV_INT_PLUS_10(TEST_ADV_INTERVAL)
+#define ADV_INT_MAX_MS TEST_ADV_INTERVAL
 
 #define TASK_DELAY_MS ADV_INT_MIN_MS
 #define TASK_DELAY_SYSTICK pdMS_TO_TICKS(TASK_DELAY_MS)
@@ -57,8 +56,22 @@ static uint8_t *test_payload_buffer_ptr = NULL;
 #define MAX_BLOCK_TIME_SEMAPHORE_MS 300
 #define MAX_BLOCK_TIME_SEMAPHORE_TICKS pdMS_TO_TICKS(MAX_BLOCK_TIME_SEMAPHORE_MS)
 
-#define NO_PACKET_TO_SEND 2000
-#define TEST_NO_PACKETS_TO_KEY_REPLACE 200
+static volatile uint16_t pdu_send_counter = PDU_TO_KEY_FRAGMENT_RATIO;
+static volatile uint32_t prev_key_id = 0;
+
+uint16_t get_and_increment_pdu_send_counter()
+{
+    uint16_t counter_value = pdu_send_counter;
+    if (pdu_send_counter == PDU_TO_KEY_FRAGMENT_RATIO)
+    {
+        pdu_send_counter = 0;   
+    }
+    else
+    {
+        pdu_send_counter++;
+    }
+    return counter_value;
+}
 
 
 static esp_ble_adv_params_t default_ble_adv_params = {
@@ -71,25 +84,54 @@ static esp_ble_adv_params_t default_ble_adv_params = {
     };
 
 static volatile uint32_t current_random_interval_ms = ADV_INT_MIN_MS;
+static volatile uint32_t no_send_pdus = 0;
 
-void test_timeout_callback(void *arg)
-{
-   atomic_store(&EndTest, 1);
-}
-static esp_timer_create_args_t testTimeoutTimer = {
-  .callback = test_timeout_callback,
-  .arg = NULL, 
-  .name = "TEST_TIMEOUT_TIMER",  
-};
-
-static uint32_t no_send_pdus = 0;
-
-void ble_sender_main();
+void sender_wair_for_start_cmd(int * state);
+void sender_test_start_pdu(int * state);
+void sender_broadcast_pdu(int * state);
+void sender_test_end_pdu(int * state);
 bool encrypt_new_payload();
+bool encrypt_new_key_fragment();
+void ble_sender_main();
 void data_set_success_cb()
 {
     no_send_pdus++;
 }
+
+void packet_send_timeout_timer(void *arg)
+{
+    // Sprawdź czy wysłanono wszystkie pakiety
+    if (packet_send_counter >= NO_PACKET_TO_SEND)
+    {
+        return;
+    }
+
+    // Zinkrementuj licznik i sprawdź, który typ pakietu należy wysłać
+    bool result;
+    if (get_and_increment_pdu_send_counter() == PDU_TO_KEY_FRAGMENT_RATIO)
+    {
+        result = encrypt_new_key_fragment();
+    }
+    else
+    {
+        result = encrypt_new_payload();
+    }
+
+    // Pobierz interwał nadawania w mikrosekundach
+    uint64_t delay_us = (uint64_t) (get_time_interval_for_current_session_key() * 1000);
+
+    //zatrzymaj timer
+    esp_timer_stop(xPacketSendTimeoutTimer);
+
+    // uruchom timer z czasem interwału nadawnia
+    esp_timer_start_once(xPacketSendTimeoutTimer, delay_us);
+}
+
+static esp_timer_create_args_t packetSendTimeoutTimer = {
+  .callback = packet_send_timeout_timer,
+  .arg = NULL, 
+  .name = "PACKET_SEND_TIMEOUT_TIMER",  
+};
 
 void serial_data_received(uint8_t * data, size_t data_len)
 {
@@ -154,7 +196,7 @@ void app_main(void)
         return;
     xSemaphoreTake(xStartCmdReceived, MAX_BLOCK_TIME_SEMAPHORE_TICKS);
 
-    if (esp_timer_create(&testTimeoutTimer, &xTestTimeoutTimer) != ESP_OK)
+    if (esp_timer_create(&packetSendTimeoutTimer, &xPacketSendTimeoutTimer) != ESP_OK)
         return;
 
     if (init_controller == true)
@@ -175,12 +217,6 @@ void app_main(void)
         ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed to init broadcast controller");
     }
 }
-
-void sender_wair_for_start_cmd(int * state);
-void sender_test_start_pdu(int * state);
-void sender_broadcast_pdu(int * state);
-void sender_test_end_pdu(int * state);
-bool encrypt_new_payload();
 
 void ble_sender_main()
 {
@@ -228,6 +264,8 @@ void sender_wair_for_start_cmd(int *state)
 
 void sender_test_start_pdu(int *state)
 {
+    const uint32_t DELAY_MS = 5000;
+
     ESP_LOGI(SENDER_APP_LOG_GROUP, "Sending Start Broadcast PDUs");
     beacon_test_pdu pdu;
     if (build_test_start_pdu(&pdu) == ESP_OK)
@@ -236,66 +274,46 @@ void sender_test_start_pdu(int *state)
     }
     
     start_broadcasting(&default_ble_adv_params);
-    if (TEST_ADV_INTERVAL == INT_20MS)
-    {
-        vTaskDelay(pdMS_TO_TICKS(TEST_ADV_INTERVAL * 30));
-    }
-    else if (TEST_ADV_INTERVAL == INT_RANDOM)
-    {
-        ESP_LOGI(SENDER_APP_LOG_GROUP, "Wait a bit");
-        vTaskDelay(pdMS_TO_TICKS(4000));
-    }
-    else
-    {
-        vTaskDelay(pdMS_TO_TICKS(TEST_ADV_INTERVAL * 10));
-    }
+
+    ESP_LOGI(SENDER_APP_LOG_GROUP, "Wait a bit");
+    vTaskDelay(pdMS_TO_TICKS(DELAY_MS));
+
     init_test();
     start_test_measurment(TEST_SENDER_ROLE);
     test_log_sender_data(TEST_PAYLOAD_BYTES_LEN, TEST_ADV_INTERVAL);
     ESP_LOGI(SENDER_APP_LOG_GROUP, "Changing state to broadcast pdus");
-    //esp_timer_start_once(xTestTimeoutTimer, testTimeoutUs);
+    esp_timer_start_once(xPacketSendTimeoutTimer, TIMER_FIRST_START_TIME_US);
     *state = SENDER_BROADCAST_PDU;
 }
 
 void sender_broadcast_pdu(int *state)
 {
+
     if (packet_send_counter >= NO_PACKET_TO_SEND)
     {
         *state = SENDER_TEST_END_PDU;
         return;
     }
 
-    bool result = encrypt_new_payload();
-    if (!result)
-    {
-        vTaskDelay(pdMS_TO_TICKS(current_random_interval_ms)); // Wait and continue the loop
-        return;
-    }
-        
-    vTaskDelay(pdMS_TO_TICKS(current_random_interval_ms)); // Wait before sending the next payload
+    vTaskDelay(pdMS_TO_TICKS(100));  
 }
 
 void sender_test_end_pdu(int *state)
 {
+    const uint32_t DELAY_MS = 1000 *10;
     beacon_test_pdu pdu;
     if (build_test_end_pdu(&pdu) == ESP_OK)
     {
         set_broadcasting_payload((uint8_t *)&pdu, sizeof(beacon_test_pdu));
     }
-    if (TEST_ADV_INTERVAL == INT_20MS)
-    {
-        vTaskDelay(TEST_ADV_INTERVAL * 30);
-    }
-    else
-    {
-        vTaskDelay(TEST_ADV_INTERVAL * 10);
-    }
+
+    vTaskDelay(pdMS_TO_TICKS(DELAY_MS));
+
     end_test_measurment();
 }
 
 bool encrypt_new_payload()
 {
-    static uint32_t prev_key_id = 0;
     packet_send_counter++;
     uint32_t PAYLOAD_LEN = TEST_PAYLOAD_BYTES_LEN;
     if (TEST_PAYLOAD_BYTES_LEN == RANDOM_SIZE)
@@ -318,7 +336,6 @@ bool encrypt_new_payload()
     }
 
     uint8_t payload[PAYLOAD_16_BYTES] = {0};
-    // esp_fill_random(payload, TEST_PAYLOAD_BYTES_LEN);
     memcpy(payload, test_payload_buffer_ptr, PAYLOAD_LEN);
     beacon_pdu_data pdu = {0};
     fill_marker_in_pdu(&pdu);
@@ -329,7 +346,7 @@ bool encrypt_new_payload()
         return false;
     }
     
-    if ( TEST_ADV_INTERVAL == INT_RANDOM && prev_key_id != get_current_key_id())
+    if (prev_key_id != get_current_key_id())
     {
         stop_broadcasting();
         current_random_interval_ms = get_time_interval_for_current_session_key();
@@ -345,11 +362,41 @@ bool encrypt_new_payload()
         start_broadcasting(&default_ble_adv_params);
         prev_key_id = get_current_key_id();
     }
-    else
-    {
-        set_broadcasting_payload((uint8_t *)&pdu, get_beacon_pdu_data_len(&pdu));
-    }
 
     test_log_packet_send(pdu.payload, pdu.payload_size, NULL);
+    return true;
+}
+
+bool encrypt_new_key_fragment()
+{
+    packet_send_counter++;
+    beacon_key_pdu_data pdu = {0};
+    fill_marker_in_key_pdu(&pdu);
+
+    int encrypt_status = get_key_fragment_pdu(&pdu);
+    if (encrypt_status != 0)
+    {
+        ESP_LOGE(SENDER_APP_LOG_GROUP, "Failed to get key fragment, error code: %d", encrypt_status);
+        return false;
+    }
+    
+    if (prev_key_id != get_current_key_id())
+    {
+        stop_broadcasting();
+        current_random_interval_ms = get_time_interval_for_current_session_key();
+        default_ble_adv_params.adv_int_min = MS_TO_N_CONVERTION(current_random_interval_ms);
+        default_ble_adv_params.adv_int_max = MS_TO_N_CONVERTION(current_random_interval_ms);
+        ESP_LOGI(SENDER_APP_LOG_GROUP, "New interval time %lu ms", current_random_interval_ms);
+        while (get_broadcast_state() != BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING)
+        {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        set_broadcasting_payload((uint8_t *)&pdu, get_beacon_key_pdu_data_len());
+        start_broadcasting(&default_ble_adv_params);
+        prev_key_id = get_current_key_id();
+    }
+
+    test_log_key_fragment_send();
     return true;
 }

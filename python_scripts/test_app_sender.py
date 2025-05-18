@@ -12,11 +12,12 @@ SERIAL_PORT_CONFIG = {
     'parity': serial.PARITY_NONE
 }
 
-FILENAME = "test_sender"
+FILENAME = "test_sender_algorithm_v2"
 TIMESTR = time.strftime("%Y%m%d_%H%M%S")
 PAYLOAD_SIZE = "10_bytes"
-INTERVAL = "multi_dynamic_20_200"
-LOGFILEPATH = FILENAME + "_" + TIMESTR + "_" + PAYLOAD_SIZE + "_" + INTERVAL + "ms" + ".txt"
+INTERVAL = "based_on_key_id_3000_5000"
+DETAILS = "multiple"
+LOGFILEPATH = FILENAME + "_" + TIMESTR + "_" + DETAILS + "_" + PAYLOAD_SIZE + "_" + INTERVAL + "ms" + ".txt"
 
 MAX_Q_SIZE = 20
 START_TIME_DELAY = 2

@@ -9,9 +9,9 @@
     },
     "idf.espIdfPathWin": "C:\\esp-idf",
     "idf.openOcdConfigs": [
-        "board/esp32s3-builtin.cfg"
+        "board/esp32-wrover-kit-3.3v.cfg"
     ],
-    "idf.portWin": "COM4",
+    "idf.portWin": "COM3",
     "idf.pythonBinPathWin": "C:\\esp-idf-tools\\python_env\\idf5.4_py3.11_env\\Scripts\\python.exe",
     "idf.toolsPathWin": "C:\\esp-idf-tools",
     "idf.flashType": "UART",
@@ -65,6 +65,16 @@
         "beacon_test_pdu.h": "c",
         "tasks_data.C": "cpp",
         "typeinfo": "c",
-        "test.h": "c"
+        "test.h": "c",
+        "beacon_crypto_data.h": "c",
+        "sec_pdu_process_queue.h": "c",
+        "sec_pdu_processing_queue.h": "c",
+        "sec_pdu_processing_scan_callback.h": "c",
+        "memory": "c",
+        "future": "c",
+        "istream": "c",
+        "tuple": "c",
+        "utility": "c",
+        "cmath": "c"
     }
 }

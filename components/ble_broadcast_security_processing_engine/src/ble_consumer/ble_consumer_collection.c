@@ -115,43 +115,39 @@ int get_index_for_mac_addr(ble_consumer_collection * p_ble_consumer_collection, 
     return index;
 }
 
-
-int clear_ble_consumer_from_collection(ble_consumer_collection * p_ble_consumer_collection, const uint8_t index)
-{
-    int status = -1;
-    if (p_ble_consumer_collection != NULL)
-    {
-        if (xSemaphoreTake(p_ble_consumer_collection->xMutex, portMAX_DELAY) == pdTRUE)
-        {
-            reset_ble_consumer(&(p_ble_consumer_collection->arr[index]));
-            p_ble_consumer_collection->consumers_count--;
-            xSemaphoreGive(p_ble_consumer_collection->xMutex);
-        }
-    }
-    return status;
-}
-
 ble_consumer * add_consumer_to_collection(ble_consumer_collection *p_collection, esp_bd_addr_t mac_address) {
 
     ble_consumer * p_ble_consumer = NULL;
 
+    // Sprawdz parametry wejsciowe
     if (p_collection == NULL || mac_address == NULL) return p_ble_consumer;
 
+    // Pobierz semafor
     if (xSemaphoreTake(p_collection->xMutex, portMAX_DELAY) != pdTRUE) {
         return p_ble_consumer;
     }
 
+    // Pobierz pierwszy wolny indeks w tablicy z nadawcami
     int index = get_first_free_index(p_collection);
     if (index >= 0) {
+        // Wyczyść strukturę nadawcy
         reset_ble_consumer(&p_collection->arr[index]);
+
+        // Przekopiuj adres MAC nadawcy
         memcpy(p_collection->arr[index].mac_address_arr, mac_address, sizeof(esp_bd_addr_t));
+
+        // Zapisz znacznik czasu ostatniego uzycia struktury nadawcy
         save_timestamp(&p_collection->arr[index].last_pdu_timestamp, &p_collection->arr[index].rollover);
+
+        // Zwieksz liczbe aktywnych nadawcow
         p_collection->consumers_count++;
+
         p_ble_consumer = &(p_collection->arr[index]);
     } else {
         ESP_LOGE("BLE_COLLECTION", "No space available for new consumer!");
     }
 
+    // Zwolnij Mutex
     xSemaphoreGive(p_collection->xMutex);
     return p_ble_consumer;
 }
@@ -160,16 +156,25 @@ ble_consumer * get_ble_consumer_from_collection(ble_consumer_collection * p_ble_
 {
     ble_consumer * p_ble_consumer = NULL;
 
+    // Sprawdz parametry wejsciowe
     if (p_ble_consumer_collection != NULL && mac_address_arr != NULL)
     {
+        // Pobierz Mutex
         if (xSemaphoreTake(p_ble_consumer_collection->xMutex, portMAX_DELAY) == pdTRUE)
         {
+            // Wyszukaj indeks nadawcy w tablicy na podstawie adresu MAC nadawcy
             int index = get_index_for_mac_addr(p_ble_consumer_collection, mac_address_arr);
+
             if (index >= 0)
             {
+                // Zapisz wskaznik na strukture nadawcy
                 p_ble_consumer = &(p_ble_consumer_collection->arr[index]);
+
+                // Zapisz znacznik czasowy ostatniego uzycia
                 save_timestamp(&(p_ble_consumer_collection->arr[index].last_pdu_timestamp), &(p_ble_consumer_collection->arr[index].rollover));
-            }   
+            }
+
+            // Zwolnij Mutex
             xSemaphoreGive(p_ble_consumer_collection->xMutex);
         }
     }
@@ -178,18 +183,39 @@ ble_consumer * get_ble_consumer_from_collection(ble_consumer_collection * p_ble_
 
 }
 
+int clear_ble_consumer_from_collection(ble_consumer_collection * p_ble_consumer_collection, const uint8_t index)
+{
+    int status = -1;
+    if (p_ble_consumer_collection != NULL)
+    {
+        // Wyczyść strukturę nadawcy
+        reset_ble_consumer(&(p_ble_consumer_collection->arr[index]));
+
+        // Dekrementuj liczbe aktywnych nadawcow
+        p_ble_consumer_collection->consumers_count--;
+    }
+    return status;
+}
+
 int remove_consumer_from_collection(ble_consumer_collection * p_ble_consumer_collection, esp_bd_addr_t mac_address_arr)
 {
     int status = -1;
+    // Sprawdz parametry wejsciowe
     if (p_ble_consumer_collection != NULL && mac_address_arr != NULL)
     {
+        // Pobierz Mutex
         if (xSemaphoreTake(p_ble_consumer_collection->xMutex, portMAX_DELAY) == pdTRUE)
         {
+            // Wyszukaj indeks nadawcy w tablicy na podstawie adresu MAC nadawcy
             int index = get_index_for_mac_addr(p_ble_consumer_collection, mac_address_arr);
+
             if (index >= 0)
             {
+                // Wyczysc strukture nadawcy
                 clear_ble_consumer_from_collection(p_ble_consumer_collection, index);
             }
+
+            // Zwolnij Mutex
             xSemaphoreGive(p_ble_consumer_collection->xMutex);
         }
         status = 0;
@@ -197,25 +223,30 @@ int remove_consumer_from_collection(ble_consumer_collection * p_ble_consumer_col
     return status;
 }
 
-int remove_lru_consumer_from_collection(ble_consumer_collection * p_ble_consumer_collection)
-{
-    return -1;
-}
-
-
 int get_active_no_consumers(ble_consumer_collection * p_ble_consumer_collection)
 {
     int active_consumers_count = -1;
+    // Sprawdz parametry wejsciowe 
     if (p_ble_consumer_collection == NULL)
     {
         return active_consumers_count;
     }
 
+    // Pobierz Mutex
     if (xSemaphoreTake(p_ble_consumer_collection->xMutex, portMAX_DELAY) == pdTRUE)
     {
+        // Odczytaj liczbe aktywnych nadawcow
         active_consumers_count = p_ble_consumer_collection->consumers_count;
+
+        // Zwolnij Mutex
         xSemaphoreGive(p_ble_consumer_collection->xMutex);
     }
 
     return active_consumers_count;
+}
+
+
+int remove_lru_consumer_from_collection(ble_consumer_collection * p_ble_consumer_collection)
+{
+    return -1;
 }

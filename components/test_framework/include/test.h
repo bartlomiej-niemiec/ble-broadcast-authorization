@@ -48,6 +48,8 @@ void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_
 
 void test_log_packet_send(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address);
 
+void test_log_key_fragment_send();
+
 void test_log_key_reconstruction_start(esp_bd_addr_t mac_address, uint16_t key_id);
 
 void test_log_key_reconstruction_end(esp_bd_addr_t mac_address, uint16_t key_id);
@@ -59,5 +61,9 @@ void test_log_processing_queue_percentage(double percentage);
 bool is_pdu_from_expected_sender(esp_bd_addr_t addr);
 
 void test_log_bad_structure_packet(esp_bd_addr_t addr);
+
+void test_log_adv_time_not_authorize(esp_bd_addr_t addr);
+
+void test_log_packet_received_key_fragment_already_decoded(esp_bd_addr_t mac_address);
 
 #endif

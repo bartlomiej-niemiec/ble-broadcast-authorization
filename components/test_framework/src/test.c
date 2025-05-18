@@ -34,6 +34,7 @@ typedef struct {
 
 typedef struct {
     esp_bd_addr_t mac_address;
+    SemaphoreHandle_t xMutex;
     uint32_t total_packets_received;
     double total_key_reconstruction_time;
     double avarage_key_reconstruction_time;
@@ -42,6 +43,7 @@ typedef struct {
     queue_fill_info deferred_queue;
     uint32_t no_bad_structure_packets;
     uint32_t wrongly_decoded_data_packets;
+    uint32_t unauthorize_packets;
 } test_consumer;
 
 typedef struct {
@@ -79,6 +81,25 @@ typedef struct {
 } test_packet_structure;
 static const TickType_t TEST_QUEUE_WAIT_SYSTICKS = pdMS_TO_TICKS(50);
 
+static uint32_t counter = 0;
+
+void increment_received_packet_for_consumer(test_consumer * consumer)
+{
+    if (xSemaphoreTake(consumer->xMutex, TEST_SEMAPHORE_MAX_BLOCK_TIME_SYSTICK) == pdPASS)
+    {
+        consumer->total_packets_received++;
+        xSemaphoreGive(consumer->xMutex);
+    }
+}
+
+void increment_unauthorize_packet_for_consumer(test_consumer * consumer)
+{
+    if (xSemaphoreTake(consumer->xMutex, TEST_SEMAPHORE_MAX_BLOCK_TIME_SYSTICK) == pdPASS)
+    {
+        consumer->unauthorize_packets++;
+        xSemaphoreGive(consumer->xMutex);
+    }
+}
 
 bool is_data_decoded_valid(uint8_t * data, size_t data_size)
 {
@@ -149,7 +170,14 @@ void reset_test_consumers_structure()
         ble_test_consumers[i].key_rec_data.key_reconstruction_end_ms = 0;
         ble_test_consumers[i].deferred_queue.no_checks = 0;
         ble_test_consumers[i].deferred_queue.total_fill = 0;
+        ble_test_consumers[i].unauthorize_packets = 0;
         memset(ble_test_consumers[i].mac_address, 0, sizeof(esp_bd_addr_t));
+
+        ble_test_consumers[i].xMutex = xSemaphoreCreateMutex();
+        if (ble_test_consumers[i].xMutex == NULL)
+        {
+            ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to initialized Semaphore");
+        }
     }
 
     memset(ble_test_producer.mac_address, 0, sizeof(esp_bd_addr_t));
@@ -295,20 +323,20 @@ void init_task_resources()
         return;
     }
 
-    int result = xTaskCreate(
-        test_receiver_app_main,
-        "RECEIVER TEST TASK",
-        RECEIVER_TEST_TASK_STACK_SIZE,
-        NULL,
-        14,
-        &xTestPacketsTask
-    );
+    // int result = xTaskCreate(
+    //     test_receiver_app_main,
+    //     "RECEIVER TEST TASK",
+    //     RECEIVER_TEST_TASK_STACK_SIZE,
+    //     NULL,
+    //     14,
+    //     &xTestPacketsTask
+    // );
 
-    if (xTestPacketsTask == NULL || result != pdPASS)
-    {
-        ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to initialized test receiver task");
-        return;
-    }
+    // if (xTestPacketsTask == NULL || result != pdPASS)
+    // {
+    //     ESP_LOGE(TEST_ESP_LOG_GROUP, "Failed to initialized test receiver task");
+    //     return;
+    // }
 }
 
 void start_test_measurment(TEST_ROLE role)
@@ -347,6 +375,7 @@ void end_test_measurment()
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "NO KEY RECONSTRUCTED: %i", (int) ble_test_consumers[i].no_reconstructed_keys);
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "NO BAD STRUCTURE PACKETS: %i", (int) ble_test_consumers[i].no_bad_structure_packets);
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "WRONGLY DECODED PACKETS: %i", (int) ble_test_consumers[i].wrongly_decoded_data_packets);
+                ESP_LOGI(TEST_ESP_LOG_GROUP, "UNAUTHORIZE INTERVAL PACKETS: %i", (int) ble_test_consumers[i].unauthorize_packets);
                 if (ble_test_consumers[i].deferred_queue.no_checks != 0)
                 {
                     double avarage_def_q_fill = ((double)((ble_test_consumers[i].deferred_queue.total_fill * 100) / ((double) ble_test_consumers[i].deferred_queue.no_checks)) );
@@ -377,12 +406,13 @@ void test_log_sender_key_replace_time_in_s(uint16_t key_replace_time_in_s)
 
 void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_address)
 {
+
     if (data == NULL || mac_address == NULL)
     {
         ESP_LOGE(TEST_ESP_LOG_GROUP, "Passed PDU Data or Mac Addrr is NULL");
         return;
     }
-    static uint32_t counter = 0;
+
     int index = -1;
     if ((index = get_consumer_index(mac_address)) >= 0)
     {
@@ -392,13 +422,16 @@ void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_
         }
         else
         {
-            ble_test_consumers[index].total_packets_received++;
+            increment_received_packet_for_consumer(&ble_test_consumers[index]);
+
             if (ble_test_consumers[index].total_packets_received % PACKET_CONST_COUNTER == 0)
             {
                 counter++;
                 ESP_LOG_BUFFER_HEX("TEST_LOG_GROUP: Sender addr", data, data_len);
                 ESP_LOGI(TEST_ESP_LOG_GROUP, "%lu Packet has been received!", (uint32_t) (counter * PACKET_CONST_COUNTER));
             }
+
+            
         }
     }
     else
@@ -411,7 +444,7 @@ void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_
             }
             else
             {
-                ble_test_consumers[index].total_packets_received++;
+                increment_received_packet_for_consumer(&ble_test_consumers[index]);
                 if (ble_test_consumers[index].total_packets_received % PACKET_CONST_COUNTER == 0)
                 {
                     counter++;
@@ -419,6 +452,20 @@ void test_log_packet_received(uint8_t *data, size_t data_len, esp_bd_addr_t mac_
                     ESP_LOGI(TEST_ESP_LOG_GROUP, "%lu Packet has been received!", (uint32_t) (counter * PACKET_CONST_COUNTER));
                 }
             }
+        }
+    }
+}
+
+void test_log_packet_received_key_fragment_already_decoded(esp_bd_addr_t mac_address)
+{
+    int index = -1;
+    if ((index = get_consumer_index(mac_address)) >= 0)
+    {
+        increment_received_packet_for_consumer(&ble_test_consumers[index]);
+        if (ble_test_consumers[index].total_packets_received % PACKET_CONST_COUNTER == 0)
+        {
+            counter++;
+            ESP_LOGI(TEST_ESP_LOG_GROUP, "%lu Packet has been received!", (uint32_t) (counter * PACKET_CONST_COUNTER));
         }
     }
 }
@@ -449,7 +496,16 @@ void test_log_packet_send(uint8_t *data, size_t data_len, esp_bd_addr_t mac_addr
         ESP_LOGE(TEST_ESP_LOG_GROUP, "Passed PDU Data or Mac Addrr is NULL");
         return;
     }
-    static uint32_t counter = 0;
+    ++ble_test_producer.total_packets_send;
+    if (ble_test_producer.total_packets_send % PACKET_CONST_COUNTER == 0)
+    {
+        counter++;
+        ESP_LOGI(TEST_ESP_LOG_GROUP, "%lu Packet has been sent!", (uint32_t) (counter * PACKET_CONST_COUNTER));
+    }
+}
+
+void test_log_key_fragment_send()
+{
     ++ble_test_producer.total_packets_send;
     if (ble_test_producer.total_packets_send % PACKET_CONST_COUNTER == 0)
     {
@@ -516,4 +572,19 @@ void test_log_processing_queue_percentage(double percentage)
     ESP_LOGI(TEST_ESP_LOG_GROUP, "Sec Processing Queue Fill: %.2f", percentage * 100.0);
     consumer_sec_processing_queue.no_checks++;
     consumer_sec_processing_queue.total_fill += percentage;
+}
+
+void test_log_adv_time_not_authorize(esp_bd_addr_t addr)
+{
+    int index = -1;
+    if ((index = get_consumer_index(addr)) >= 0)
+    {
+        increment_unauthorize_packet_for_consumer(&(ble_test_consumers[index]));
+    }
+    {
+        if ((index = add_consumer_to_table(addr)) >= 0)
+        {
+            increment_unauthorize_packet_for_consumer(&(ble_test_consumers[index]));
+        }
+    }
 }

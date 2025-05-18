@@ -4,6 +4,7 @@ import time
 import csv
 import queue
 
+# Ustawienia dla portu szeregowego
 SERIAL_PORT_CONFIG = {
     'port': 'COM3',
     'baudrate': 115200,
@@ -12,15 +13,18 @@ SERIAL_PORT_CONFIG = {
     'parity': serial.PARITY_NONE
 }
 
-FILENAME = "test_receiver"
+# Nazwa pliku z danymi
+FILENAME = "test_receiver_algorithm_v2"
 TIMESTR = time.strftime("%Y%m%d_%H%M%S")
 PAYLOAD_SIZE = "10_bytes"
-INTERVAL = "multi_dynamic_200_1000"
-LOGFILEPATH = FILENAME + "_" + TIMESTR + "_" + PAYLOAD_SIZE + "_" + INTERVAL + "ms" + ".txt"
+INTERVAL = "based_on_key_id_3000_5000"
+DETAILS = "multiple"
+LOGFILEPATH = FILENAME + "_" + TIMESTR + "_" + DETAILS + "_" + PAYLOAD_SIZE + "_" + INTERVAL + "ms" + ".txt"
 
+# Maksymalny rozmiar kolejki przeznacznej dla składowanie
+# wiadomości odbirocy
 MAX_Q_SIZE = 20
 
-START_CMD = "START_TEST"
 CSV_FIELDS = ["timestamp", "message", "data"]
 CSV_DICT_TEMPLATE = {
     "timestamp": "",
@@ -28,9 +32,11 @@ CSV_DICT_TEMPLATE = {
     "data": ""
 }
 
+# Wiadomość o końcu testu
 TEST_END_MSG = "TEST ENDED"
 
 
+# Klasa przeznaczona do dodawania wiadomości odbiorcy do kolejki
 class LogWriter:
 
     def __init__(self, queue):
@@ -49,29 +55,9 @@ class LogWriter:
         if self._is_log_start(data):
             self._queue.put(data)
 
-    def _extract_data_from_serial(self, data):
-        row_to_write = CSV_DICT_TEMPLATE.copy()
-        i = 0
-        while data[i] != '(':
-            i += 1
-        i += 1
-        timestamp = ""
-        while data[i] != ')':
-            timestamp += data[i]
-            i += 1
 
-        row_to_write["timestamp"] = timestamp
-        rest_data = data[i:]
-        splitted_rest_data = rest_data.split(":")
-        if len(splitted_rest_data) > 2:
-            row_to_write["message"] = splitted_rest_data[1].strip()
-            row_to_write["data"] = splitted_rest_data[2].strip()
-        else:
-            row_to_write["message"] = splitted_rest_data[1].strip()
-
-        return row_to_write
-
-
+# Klasa obsługująca komunikację z odbiorcę - odbiór/wysłanie danych przez
+# port szeregowy
 class Esp32PrintLines(serial.threaded.LineReader):
     TERMINATOR = b'\r\n'
     ENCODING = 'utf-8'
@@ -93,22 +79,16 @@ class Esp32PrintLines(serial.threaded.LineReader):
         print(f"Connection has been lost: {exc}")
 
     def write_line(self, text):
-        """
-        Write text to the transport. ``text`` is a Unicode string and the encoding
-        is applied before sending and also the newline is append.
-        """
-        # + is not the best choice but bytes does not support % or .format in py3 and we want a single write call
         self.transport.write(text.encode(self.ENCODING, self.UNICODE_HANDLING))
 
 
+# Metoda wytwórcza - stworzenie instancji klasy 'Esp32PrintLines'
 class Esp32ProtocolFactory:
-
     QUEUE = None
 
     @classmethod
     def register_queue(cls, queue):
         cls.QUEUE = queue
-
 
     @classmethod
     def create_protocol(cls):
@@ -117,6 +97,7 @@ class Esp32ProtocolFactory:
 
 if __name__ == "__main__":
 
+    # Nawiazanie połączenie przez port szeregowy
     serial_port = serial.Serial(
         SERIAL_PORT_CONFIG['port'],
         SERIAL_PORT_CONFIG['baudrate'],
@@ -125,18 +106,32 @@ if __name__ == "__main__":
         SERIAL_PORT_CONFIG['stopbits'],
     )
 
+    # Kolejka na odebrane dane
     queue = queue.Queue(maxsize=MAX_Q_SIZE)
+
+    # Rejestracja kolejki - zarejestrowana kolejka będzie używana przez klasę Log Writer
     Esp32ProtocolFactory.register_queue(queue)
+
+    # Stworzenie osobnego wątku dla odbierania danych
     t = serial.threaded.ReaderThread(serial_port, Esp32ProtocolFactory.create_protocol)
+
+    # Uruchomienie wątku
     with t as protocol:
+
+        # Stworzenie nowego pliku do zapisu danych
         with open(LOGFILEPATH, 'w', newline='\r\n', encoding='utf-8') as csvfile:
+
             while True:
+
+                # Przetwarzanie danych z kolejki odbiorczej
                 if not queue.empty():
                     data = queue.get()
                     print(data)
                     if TEST_END_MSG is data:
                         exit()
                     data += '\r\n'
-                    csvfile.write(data)
-                time.sleep(0.010)
 
+                    # Zapis danych do pliku
+                    csvfile.write(data)
+
+                time.sleep(0.010)

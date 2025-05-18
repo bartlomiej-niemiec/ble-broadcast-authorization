@@ -18,18 +18,11 @@
 
 #include "tasks_data.h"
 
-#define EVENT_QUEUE_SIZE 10
-#define MINUS_INTERVAL_TOLERANCE_MS 10
-#define PLUS_INTERVAL_TOLERANCE_MS 10
-
 #define SEMAPHORE_TIMEOUT_MS 20
 #define QUEUE_TIMEOUT_MS 20
 
 #define N_CONST 0.625
 #define MS_TO_N_CONVERTION(MS) ((uint16_t)((MS) / (N_CONST)))
-
-#define ADV_INT_MIN_MS 100
-#define ADV_INT_MAX_MS 110
 
 #define MAX_SCAN_COMPLETE_CB 2
 
@@ -181,6 +174,7 @@ static esp_err_t init_resources()
 static void ble_sender_main(void) {
     while (1) {
 
+        // Pętla zdarzeń - pobierz nowe zdarzenie
         EventBits_t events = xEventGroupWaitBits(bc.eventGroup,
                                                  BLE_ADV_DATA_RAW_SET_COMPLETE_EVT |
                                                  BLE_ADV_START_COMPLETE_EVT |
@@ -190,44 +184,54 @@ static void ble_sender_main(void) {
                                                  pdTRUE, pdFALSE, portMAX_DELAY);
 
        
+            // Obsłuż zdarzenie nowego ustawienia danych do rozgłaszania
             if (events & BLE_ADV_DATA_RAW_SET_COMPLETE_EVT)
             {
                 if (bc.data_set_cb) {
+                    // Zawołaj funkcję zwrotną klienta
                     bc.data_set_cb();
                 }
             }
 
+            // Obsłuż zdarzenie start transmisji rozgłoszeniowej
             if (events & BLE_ADV_START_COMPLETE_EVT)
             {
+                // Ustaw stan transmisji na aktywny
                 set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
                 if (bc.state_change_cb) {
+                    // Zawołaj funkcję zwrotną klienta
                     bc.state_change_cb(BROADCAST_CONTROLLER_BROADCASTING_RUNNING);
                 }
                 ESP_LOGI(BROADCAST_LOG_GROUP, "Broadcast started!");
             }
 
+            // Obsłuż zdarzenie stop transmisji rozgłoszeniowej
             if (events & BLE_ADV_STOP_COMPLETE_EVT)
             {
+                // Ustaw stan transmisji na nieaktywny
                 set_broadcast_state(BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING);
                 if (bc.state_change_cb) {
+                    // Zawołaj funkcję zwrotną klienta
                     bc.state_change_cb(BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING);
                 }
                 ESP_LOGI(BROADCAST_LOG_GROUP, "Broadcast stopped!");
             }
 
+            // Obsłuż zdarzenie start skanowania pakietów rozgłoszeniowych
             if (events & BLE_SCAN_START_COMPLETE_EVT)
             {
+                // Ustaw stan skanowania na aktywny
                 set_scanner_state(SCANNER_CONTROLLER_SCANNING_ACTIVE);
             }
 
+            // Obsłuż zdarzenie stop skanowania pakietów rozgłoszeniowych
             if (events & BLE_SCAN_STOP_COMPLETE_EVT)
             {
+                // Ustaw stan skanowania na nieaktywny
                 set_scanner_state(SCANNER_CONTROLLER_SCANNING_NOT_ACTIVE);
             }
     }
 }
-
-
 
 
 bool init_broadcasting()
@@ -318,78 +322,98 @@ void register_scan_complete_callback(scan_complete cb)
     }
 }
 
+// Ustaw nowe dane do rozgłaszania
 void set_broadcasting_payload(uint8_t *payload, size_t payload_size)
 {
-    if (xSemaphoreTake(bc.xMutex, pdMS_TO_TICKS(SEMAPHORE_TIMEOUT_MS)) == pdTRUE)
+    // Sprawdz bufor danych i stan transmisji
+    if (payload_size <= MAX_GAP_DATA_LEN && payload != NULL &&
+        get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_RUNNING)
     {
-        if (payload_size <= MAX_GAP_DATA_LEN)
-        {
-            esp_ble_gap_config_adv_data_raw(payload, payload_size);
-        } 
-        xSemaphoreGive(bc.xMutex);
-    }
+        // Zgłoś żądanie nowych danych do stosu BLE
+        esp_ble_gap_config_adv_data_raw(payload, payload_size);
+    } 
 }
 
+// Stop transmisji rozgłoszeniowej
 void stop_broadcasting()
 {
+    // Sprawdz czy transmisja pakietów rozgłoszeniowych aktywna
     if (get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_RUNNING)
     {
+        // Zgłoś żądanie stop transmisji do stosu BLE
         esp_ble_gap_stop_advertising();
     }
 }
 
+// Start transmisji rozgłoszeniowej z podanymi parametrami
 void start_broadcasting(esp_ble_adv_params_t * ble_adv_params) {
+    // Sprawdz czy urzadzenie jest w trybie skanowania
     if (get_scanner_state() == SCANNER_CONTROLLER_SCANNING_ACTIVE) {
         ESP_LOGE(BROADCAST_LOG_GROUP, "Stopping Broadcasting");
-        stop_scanning(); // Ensure no overlap
+        // zakoncz skanowanie
+        stop_scanning();
     }
+    // Sprawdz czy transmisja pakietów rozgłoszeniowych nieaktywna
     if (get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_NOT_RUNNING) {
         ESP_LOGE(BROADCAST_LOG_GROUP, "Starting Broadcasting");
+        // Ustaw moc nadajnika na maksymalna
         esp_err_t result = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_P9);
         result &= esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9);
         if (result != ESP_OK)
         {
             ESP_LOGE(BROADCAST_LOG_GROUP, "Error while setting tx power!");
         }
+        // Zgłoś żądanie startu do stosu BLE
         esp_ble_gap_start_advertising(ble_adv_params);
     }
 }
 
+// Ustaw stan transmisji rozgłoszeniowej
+void set_broadcast_state(BroadcastState state)
+{
+    atomic_store(&bc.broadcastState, state);
+}
+
+//Pobierz stan transmisji rozgłoszeniowej
+BroadcastState get_broadcast_state()
+{
+    return atomic_load(&bc.broadcastState);
+}
+
+// Start skanowania pakietów rozgłoszeniowych według podanych parametrów
 void start_scanning(esp_ble_scan_params_t scan_params, uint32_t scan_duration_s) {
+    // Sprawdz czy urzadzenie jest w trybie rozgłaszania 
     if (get_broadcast_state() == BROADCAST_CONTROLLER_BROADCASTING_RUNNING) {
-        stop_broadcasting(); // Ensure no overlap
+        // zakoncz rozgłąszanie
+        stop_broadcasting();
     }
+    // Sprawdz czy skanowanie pakietów rozgłoszeniowych nieaktywne
     if (get_scanner_state() == SCANNER_CONTROLLER_SCANNING_NOT_ACTIVE) {
+        // Ustaw parametry skanowania
         esp_ble_gap_set_scan_params(&scan_params);
+        // Rozpocznij skanowanie
         esp_ble_gap_start_scanning(scan_duration_s);
-        set_scanner_state(SCANNER_CONTROLLER_SCANNING_ACTIVE);
     }
 }
 
 
 void stop_scanning()
 {
+    // Sprawdz czy skanowanie pakietów rozgłoszeniowych aktywne
     if (get_scanner_state() == SCANNER_CONTROLLER_SCANNING_ACTIVE)
     {
+        // Zakoncz skanowanie
         esp_ble_gap_stop_scanning();
     }
 }
 
-BroadcastState get_broadcast_state()
-{
-    return atomic_load(&bc.broadcastState);
-}
-
+// Ustaw stan skanowania
 ScannerState get_scanner_state()
 {
     return atomic_load(&bc.scannerState);
 }
 
-void set_broadcast_state(BroadcastState state)
-{
-    atomic_store(&bc.broadcastState, state);
-}
-
+//Pobierz stan skanowania
 void set_scanner_state(ScannerState state)
 {
     atomic_store(&bc.scannerState, state);

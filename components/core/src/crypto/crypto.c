@@ -141,7 +141,7 @@ void calculate_hmac(const uint8_t *key, size_t key_len, const uint8_t *message, 
         ESP_LOGE(crypto_log_group, "Blad przy zakonczeniu zapisywania HMAC do bufora wyjsciowego");
     }
 
-    // Free the HMAC context
+    // Zwolnij zaalokowany kontekst
     mbedtls_md_free(&ctx);
 }
 

@@ -4,8 +4,10 @@
 #include "beacon_pdu_data.h"
 #include "beacon_test_pdu.h"
 #include "sec_pdu_processing.h"
+#include "sec_pdu_processing_scan_callback.h"
 #include "ble_broadcast_controller.h"
 #include "test.h"
+#include "config.h"
 
 #include <string.h>
 
@@ -17,8 +19,6 @@
 
 #define EVENT_GROUP_WAIT_MS 50
 #define EVENT_GROUP_WAIT_SYSTICK pdMS_TO_TICKS(EVENT_GROUP_WAIT_MS)
-
-#define SENDERS_NUMBER 2
 
 static const char * BLE_GAP_LOG_GROUP = "BLE_RECEIVER";
 

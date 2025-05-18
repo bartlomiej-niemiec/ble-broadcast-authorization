@@ -7,6 +7,7 @@ idf_component_register(SRCS "./src/beacon_pdu/beacon_pdu_data.c"
                             "./include/beacon_pdu"
                             "./include/ble_common"
                             "./include/crypto"
+                            "./include/config"
                     REQUIRES esp_timer
                     REQUIRES nvs_flash
                     REQUIRES bt
