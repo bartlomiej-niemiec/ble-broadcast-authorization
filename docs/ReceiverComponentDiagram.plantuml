@@ -1,0 +1,25 @@
+@startuml
+
+[BLE Broadcast Controller]
+[Crypto]
+[Client]
+
+package "BLE Broadcast Authorization"{
+[AdvertisingTimeAuthorization]
+
+[BLE Broadcast Controller] ..> "AdvertisingTimeAuthorization" : notifies on new Broadcast PDU received
+[AdvertisingTimeAuthorization] ..> [PDU Processor] : Passes authorized PDU for processing
+[AdvertisingTimeAuthorization] ..> [AdvertisingTimeAuthorization] : Evaluate adv interval and handle authorization process
+
+[Key Reconstructor] ..> [PDU Processor] : notifies when key reconstruction is finished
+[Key Reconstructor] ..> [Senders Database] : Add reconstructed key to DB
+[Key Reconstructor] ..> [Crypto] : use to decrypt key data
+
+[PDU Processor] ..> [Key Reconstructor] : commission key reconstruction
+[PDU Processor] ..> [Senders Database] : fetch sender key
+[PDU Processor] ..> [Crypto] : use to decrypt payload data
+[PDU Processor] ..> [Client] : notifies on new data
+
+}
+
+@enduml

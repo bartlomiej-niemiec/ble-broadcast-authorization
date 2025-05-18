@@ -17,3 +17,10 @@ Beyond encryption, an additional authentication step is implemented using **adve
 3. The **Observer** extracts the session ID from the PDU and checks whether the **evaluated interval falls within an acceptable time window**.
 
 This approach enhances security by requiring both **cryptographic key reconstruction** and **advertising interval validation** for successful decryption and authentication.
+
+## Authentication on component diagram
+
+On the component diagram below presented how the authentication process looks like.
+
+![alt text](https://github.com/bartlomiej-niemiec/ble-broadcast-authorization/blob/master/docs/ReceiverComponentDiagram.png "Authentication Component Diagram")
+
